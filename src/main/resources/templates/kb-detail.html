@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>文档管理</title>
+    <link rel="stylesheet" href="/css/style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div class="ink-particle"></div><div class="ink-particle"></div><div class="ink-particle"></div><div class="ink-particle"></div><div class="ink-particle"></div>
+    <div class="ink-particle"></div><div class="ink-particle"></div><div class="ink-particle"></div><div class="ink-particle"></div><div class="ink-particle"></div>
+    <div class="app-layout">
+        <header class="app-header">
+            <div class="app-header-left">
+                <span class="seal">墨</span>
+                <h1>墨 韵 · 知识库</h1>
+            </div>
+            <div class="header-right">
+                <span th:text="${username}"></span>
+                <a href="/api/auth/logout" class="btn-logout">退出</a>
+            </div>
+        </header>
+
+        <main class="main-content">
+            <div class="page-header">
+                <div style="display:flex;align-items:center;gap:12px">
+                    <a href="/kb/list" class="btn-back">&larr;</a>
+                    <h2 th:text="${kb.name}">知识库名称</h2>
+                </div>
+                <a th:href="@{/chat/{id}(id=${kb.id})}" class="btn btn-primary">开始问答</a>
+            </div>
+
+            <!-- 上传区域 -->
+            <div class="upload-area" id="uploadArea">
+                <p>拖拽文件到此处或点击上传</p>
+                <p style="font-size:12px;color:var(--ink-pale);margin-bottom:0">支持 PDF、TXT、MD、DOCX、PPTX、HTML、CSV 格式</p>
+            </div>
+            <form id="uploadForm" method="post" enctype="multipart/form-data"
+                  th:action="@{/doc/api/upload/{kbId}(kbId=${kb.id})}"
+                  style="display:none">
+                <input type="file" id="fileInput" name="file" accept=".pdf,.txt,.md,.docx,.pptx,.html,.htm,.csv" multiple>
+            </form>
+
+            <!-- 文档列表 -->
+            <div id="docList"></div>
+
+            <div id="emptyDocs" class="empty-state" style="display:none">
+                <p>还没有文档</p>
+                <p style="margin-top:8px;font-size:13px;color:var(--ink-pale)">上传文档文件开始构建知识库</p>
+            </div>
+        </main>
+    </div>
+
+    <!-- 引用弹窗 -->
+    <div id="refModal" class="modal" style="display:none">
+        <div class="modal-content modal-wide">
+            <div class="modal-header">
+                <h3>引用来源</h3>
+                <button class="modal-close" onclick="hideRefModal()">&times;</button>
+            </div>
+            <div id="refContent" class="ref-content"></div>
+        </div>
+    </div>
+
+    <script th:inline="javascript">
+        const kbId = [[${kb.id}]];
+
+        // 上传
+        const uploadArea = document.getElementById('uploadArea');
+        const fileInput = document.getElementById('fileInput');
+
+        uploadArea.addEventListener('click', () => fileInput.click());
+
+        uploadArea.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            uploadArea.style.borderColor = 'var(--cinnabar)';
+            uploadArea.style.background = 'var(--cinnabar-dim)';
+        });
+        uploadArea.addEventListener('dragleave', () => {
+            uploadArea.style.borderColor = '';
+            uploadArea.style.background = '';
+        });
+        uploadArea.addEventListener('drop', (e) => {
+            e.preventDefault();
+            uploadArea.style.borderColor = '';
+            uploadArea.style.background = '';
+            if (e.dataTransfer.files.length > 0) {
+                fileInput.files = e.dataTransfer.files;
+                uploadFiles(e.dataTransfer.files);
+            }
+        });
+
+        fileInput.addEventListener('change', () => {
+            if (fileInput.files.length > 0) uploadFiles(fileInput.files);
+        });
+
+        async function uploadFiles(files) {
+            const formData = new FormData();
+            for (const file of files) formData.append('files', file);
+            try {
+                const resp = await fetch('/doc/api/upload/' + kbId, { method: 'POST', body: formData });
+                const data = await resp.json();
+                if (data.code === 200) {
+                    loadDocs();
+                } else {
+                    alert('上传失败: ' + (data.message || '未知错误'));
+                }
+            } catch(e) {
+                alert('网络错误，上传失败');
+            }
+        }
+
+        // 加载文档列表
+        async function loadDocs() {
+            try {
+                const resp = await fetch('/doc/api/list/' + kbId);
+                const data = await resp.json();
+                const list = document.getElementById('docList');
+                const empty = document.getElementById('emptyDocs');
+
+                if (data.code !== 200 || !data.data || data.data.length === 0) {
+                    list.innerHTML = '';
+                    empty.style.display = 'block';
+                    return;
+                }
+
+                empty.style.display = 'none';
+                list.innerHTML = '';
+                for (const doc of data.data) {
+                    const statusMap = {0: '待处理', 1: '处理中', 2: '已完成', 3: '失败'};
+                    const tagMap = {0: 'tag-pending', 1: 'tag-processing', 2: 'tag-done', 3: 'tag-failed'};
+                    const name = doc.originalName || doc.filename || '未知文件';
+
+                    list.innerHTML += '<div class="doc-item">' +
+                        '<div class="doc-info">' +
+                        '<span class="doc-name">' + name + '</span>' +
+                        '<span class="tag ' + (tagMap[doc.status] || 'tag-pending') + '">' + (statusMap[doc.status] || doc.status) + '</span>' +
+                        (doc.chunkCount ? '<span class="doc-chunks">' + doc.chunkCount + ' 段</span>' : '') +
+                        '</div>' +
+                        '<button class="btn btn-sm btn-danger" onclick="deleteDoc(' + doc.id + ')">删除</button>' +
+                        '</div>';
+                }
+            } catch(e) {
+                document.getElementById('docList').innerHTML = '<p class="loading">加载失败</p>';
+            }
+        }
+
+        async function deleteDoc(id) {
+            if (!confirm('确定删除此文档？删除后不可恢复。')) return;
+            try {
+                const resp = await fetch('/doc/api/' + id, {method: 'DELETE'});
+                const data = await resp.json();
+                if (data.code === 200) {
+                    loadDocs();
+                } else {
+                    alert('删除失败: ' + (data.message || '未知错误'));
+                }
+            } catch(e) {
+                alert('网络错误，无法删除');
+            }
+        }
+
+        function hideRefModal() {
+            document.getElementById('refModal').style.display = 'none';
+        }
+
+        // 初始化
+        loadDocs();
+    </script>
+    <div class="mountain-scene" aria-hidden="true">
+        <svg viewBox="0 0 1440 200" preserveAspectRatio="xMidYMax meet">
+            <path d="M0,200 L0,140 Q80,100 160,120 Q240,140 320,90 Q400,40 480,80 Q560,120 640,50 Q720,-10 800,30 Q880,70 960,60 Q1040,50 1120,80 Q1200,110 1280,70 Q1360,30 1440,80 L1440,200 Z" fill="currentColor"/>
+            <path d="M0,200 L0,160 Q120,130 240,145 Q360,160 480,110 Q600,60 720,95 Q840,130 960,85 Q1080,40 1200,75 Q1320,110 1440,95 L1440,200 Z" fill="currentColor" opacity="0.5"/>
+            <path d="M0,200 L0,180 Q180,155 360,165 Q540,175 720,140 Q900,105 1080,130 Q1260,155 1440,140 L1440,200 Z" fill="currentColor" opacity="0.25"/>
+        </svg>
+    </div>
+</body>
+</html>

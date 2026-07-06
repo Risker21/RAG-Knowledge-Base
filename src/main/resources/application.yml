@@ -1,0 +1,57 @@
+server:
+  port: 8080
+  servlet:
+    session:
+      timeout: 30m
+
+spring:
+  config:
+    import: classpath:application-secrets.yml
+  datasource:
+    url: jdbc:mysql://localhost:3306/rag_kb?serverTimezone=Asia/Shanghai&rewriteBatchedStatements=true&useServerPrepStmts=true
+    username: root
+    driver-class-name: com.mysql.cj.jdbc.Driver
+  session:
+    store-type: redis
+  data:
+    redis:
+      host: localhost
+      port: 6379
+      timeout: 6000
+  servlet:
+    multipart:
+      max-file-size: 200MB
+      max-request-size: 500MB
+  thymeleaf:
+    cache: false
+    prefix: classpath:/templates/
+    suffix: .html
+
+# MyBatis-Plus 配置
+mybatis-plus:
+  configuration:
+    log-impl: org.apache.ibatis.logging.stdout.StdOutImpl
+    map-underscore-to-camel-case: true
+  global-config:
+    db-config:
+      id-type: auto
+      logic-delete-field: deleted
+      logic-delete-value: 1
+      logic-not-delete-value: 0
+
+# 文件上传目录
+app:
+  upload-dir: ${user.home}/Desktop/Project/rag-kb/uploads
+  openai:
+    base-url: https://ark.cn-beijing.volces.com/api/v3
+    embedding-model: doubao-embedding-vision-251215
+    chat-model: doubao-seed-1-8-251228
+  stt:
+    provider: volcengine
+    base-url: https://api.openai.com
+    model: whisper-1
+
+logging:
+  level:
+    com.rag.kb: DEBUG
+    #org.springframework.web: DEBUG  # 生产环境关闭

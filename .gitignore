@@ -1,0 +1,28 @@
+target/
+*.class
+*.jar
+*.log
+.idea/
+*.iml
+.settings/
+.project
+.classpath
+.vscode/
+uploads/
+
+# Secrets and local configuration
+application-secrets.yml
+*.env
+.env
+.env.*
+secrets/
+*credentials*
+*.secret
+*.key
+*.pem
+*.p12
+*.pfx
+
+# IDE data sources (may contain connection passwords)
+.idea/dataSources/
+.idea/dataSources.local.xml

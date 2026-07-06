@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>知识库 · 登录</title>
+    <link rel="stylesheet" href="/css/style.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div class="ink-particle"></div><div class="ink-particle"></div><div class="ink-particle"></div><div class="ink-particle"></div><div class="ink-particle"></div>
+    <div class="ink-particle"></div><div class="ink-particle"></div><div class="ink-particle"></div><div class="ink-particle"></div><div class="ink-particle"></div>
+    <div class="auth-container">
+        <div class="auth-card">
+            <h1>墨 韵</h1>
+            <p class="auth-subtitle">智能文档问答 · RAG 知识库</p>
+            <form action="/login" method="post">
+                <div class="form-group">
+                    <label class="form-label">用户名</label>
+                    <input class="form-input" type="text" name="username" placeholder="输入用户名" required>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">密码</label>
+                    <input class="form-input" type="password" name="password" placeholder="输入密码" required>
+                </div>
+                <div class="form-group captcha-group">
+                    <label class="form-label">验证码</label>
+                    <div class="captcha-row">
+                        <input class="form-input captcha-input" type="text" name="captcha"
+                               placeholder="输入验证码" maxlength="4" required>
+                        <img src="/api/captcha/image" alt="验证码"
+                             onclick="this.src='/api/captcha/image?'+Date.now()"
+                             class="captcha-img" title="点击刷新">
+                    </div>
+                </div>
+                <div th:if="${param.error}" class="error-msg" th:text="${#strings.length(param.error) > 0 ? param.error[0] : ''}"></div>
+                <button type="submit" class="btn btn-accent btn-full">登 录</button>
+            </form>
+            <p class="auth-link">还没有账号？<a href="/register">注册账号</a></p>
+        </div>
+    </div>
+    <div class="mountain-scene" aria-hidden="true">
+        <svg viewBox="0 0 1440 200" preserveAspectRatio="xMidYMax meet">
+            <path d="M0,200 L0,140 Q80,100 160,120 Q240,140 320,90 Q400,40 480,80 Q560,120 640,50 Q720,-10 800,30 Q880,70 960,60 Q1040,50 1120,80 Q1200,110 1280,70 Q1360,30 1440,80 L1440,200 Z" fill="currentColor"/>
+            <path d="M0,200 L0,160 Q120,130 240,145 Q360,160 480,110 Q600,60 720,95 Q840,130 960,85 Q1080,40 1200,75 Q1320,110 1440,95 L1440,200 Z" fill="currentColor" opacity="0.5"/>
+            <path d="M0,200 L0,180 Q180,155 360,165 Q540,175 720,140 Q900,105 1080,130 Q1260,155 1440,140 L1440,200 Z" fill="currentColor" opacity="0.25"/>
+        </svg>
+    </div>
+</body>
+</html>

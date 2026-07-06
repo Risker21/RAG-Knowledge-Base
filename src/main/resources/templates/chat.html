@@ -1,0 +1,572 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>智能问答 · 墨韵</title>
+    <link rel="stylesheet" href="/css/style.css">
+    <link rel="stylesheet" href="/css/chat-enhance.css">
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@600;700&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+</head>
+<body>
+    <div class="ink-particle"></div><div class="ink-particle"></div><div class="ink-particle"></div><div class="ink-particle"></div><div class="ink-particle"></div>
+    <div class="ink-particle"></div><div class="ink-particle"></div><div class="ink-particle"></div><div class="ink-particle"></div><div class="ink-particle"></div>
+    <div class="chat-layout">
+        <!-- 侧边栏 -->
+        <aside class="chat-sidebar">
+            <div class="sidebar-header">
+                <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
+                    <span class="seal">墨</span>
+                    <span style="font-family:var(--serif);font-size:15px;letter-spacing:1px">墨 韵</span>
+                </div>
+                <button class="btn btn-primary btn-full" onclick="newConversation()">+ 新对话</button>
+            </div>
+            <div class="conv-list" id="convList">
+                <p class="loading">加载中...</p>
+            </div>
+            <!-- 侧栏底部 -->
+            <div class="sidebar-footer">
+                <a href="/kb/list" class="btn-ghost-sm">知识库管理</a>
+            </div>
+        </aside>
+
+        <!-- 主聊天区 -->
+        <main class="chat-main">
+            <!-- 对话标题栏 -->
+            <div class="chat-titlebar" id="chatTitlebar" th:if="${convId != null}">
+                <span class="conv-title-text" id="convTitleText">对话</span>
+            </div>
+
+            <!-- 消息区域 -->
+            <div class="messages" id="messages">
+                <div class="welcome" id="welcomeBlock" th:if="${convId == null}" style="display:none">
+                    <h2>开始提问</h2>
+                    <p>上传文档后，在这里提问即可获得基于文档内容的回答</p>
+                </div>
+            </div>
+
+            <!-- 输入区 -->
+            <div class="input-area" id="inputArea" th:if="${convId != null}">
+                <div class="input-row">
+                    <textarea id="questionInput" rows="1" placeholder="输入你的问题..."
+                              onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();ask();}"
+                              oninput="autoGrow(this);toggleSendBtn(this)"></textarea>
+                    <button class="btn-send" id="sendBtn" onclick="ask()" disabled>发送</button>
+                </div>
+            </div>
+            <div class="input-area start-area" th:if="${convId == null}" style="justify-content:center;">
+                <p>请先选择一个对话或创建新对话</p>
+            </div>
+        </main>
+    </div>
+
+    <!-- 引用弹窗 -->
+    <div id="refModal" class="modal" style="display:none">
+        <div class="modal-content modal-wide">
+            <div class="modal-header">
+                <h3>引用来源</h3>
+                <button class="modal-close" onclick="hideRefModal()">&times;</button>
+            </div>
+            <div id="refContent" class="ref-content"></div>
+        </div>
+    </div>
+
+    <script th:inline="javascript">
+        const kbId = [[${kbId}]];
+        let currentConvId = [[${convId}]];
+        let isAsking = false;
+        let messageCount = 0;
+
+        // 头像 SVG 图标
+        const USER_ICON = '<svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg>';
+        const AI_ICON = '<svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><path d="M12 2l2.4 7.2L22 9l-6 5.2 2.4 7.8L12 16l-6.4 6L8 14.2 2 9l7.6-.2z"/></svg>';
+
+        // ===== 输入框自动增长 =====
+        function autoGrow(el) {
+            el.style.height = 'auto';
+            el.style.height = Math.min(el.scrollHeight, 140) + 'px';
+        }
+
+        // ===== 对话列表 =====
+        async function loadConversations() {
+            try {
+                const resp = await fetch('/chat/api/conversations/' + kbId);
+                const data = await resp.json();
+                const list = document.getElementById('convList');
+                if (data.code !== 200 || !data.data || data.data.length === 0) {
+                    list.innerHTML = '<div class="empty-conv"><div class="empty-icon">🎋</div><h3>暂无对话</h3><p>新建一个对话开始提问</p></div>';
+                    return;
+                }
+                list.innerHTML = '';
+                for (const conv of data.data) {
+                    const active = conv.id == currentConvId ? ' active' : '';
+                    list.innerHTML += '<div class="conv-item' + active + '" onclick="switchConversation(' + conv.id + ')">' +
+                        '<span class="read-dot"></span>' +
+                        '<div class="conv-title">' + (conv.title || '新对话') + '</div>' +
+                        '<button class="btn-del-conv" onclick="event.stopPropagation();deleteConversation(' + conv.id + ')" title="删除对话">&times;</button>' +
+                        '</div>';
+                }
+                updateTitlebar(data.data);
+            } catch(e) {
+                document.getElementById('convList').innerHTML = '<p class="loading">加载失败</p>';
+            }
+        }
+
+        // ===== 更新标题栏 =====
+        function updateTitlebar(convs) {
+            if (!currentConvId) return;
+            const titleEl = document.getElementById('convTitleText');
+            const conv = convs ? convs.find(c => c.id == currentConvId) : null;
+            if (conv && conv.title) {
+                titleEl.textContent = conv.title;
+            }
+        }
+
+        async function deleteConversation(convId) {
+            if (!confirm('确定要删除此对话吗？')) return;
+            try {
+                const resp = await fetch('/chat/api/conversations/' + convId, { method: 'DELETE' });
+                const data = await resp.json();
+                if (data.code === 200) {
+                    if (currentConvId == convId) {
+                        window.location.href = '/chat/' + kbId;
+                    } else {
+                        loadConversations();
+                    }
+                } else {
+                    alert('删除失败: ' + (data.message || '未知错误'));
+                }
+            } catch (e) {
+                alert('网络错误，无法删除');
+            }
+        }
+
+        async function newConversation() {
+            try {
+                const resp = await fetch('/chat/api/start', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+                    body: 'kbId=' + kbId
+                });
+                const data = await resp.json();
+                if (data.code === 200) {
+                    window.location.href = '/chat/' + kbId + '?convId=' + data.data.id;
+                } else {
+                    alert('创建对话失败: ' + (data.message || '未知错误'));
+                }
+            } catch(e) {
+                alert('网络错误，无法创建对话');
+            }
+        }
+
+        function switchConversation(convId) {
+            window.location.href = '/chat/' + kbId + '?convId=' + convId;
+        }
+
+        // ===== 消息加载与渲染 =====
+        function loadMessages() {
+            if (!currentConvId) return;
+            const messagesDiv = document.getElementById('messages');
+            messagesDiv.innerHTML = '<p class="loading">加载中...</p>';
+
+            fetch('/chat/api/messages/' + currentConvId)
+                .then(r => r.json())
+                .then(data => {
+                    if (data.code === 200 && data.data) {
+                        messagesDiv.innerHTML = '';
+                        messageCount = 0;
+                        for (const msg of data.data) {
+                            if (msg.role === 1) messageCount++;
+                            appendMessage(msg.role, msg.content, msg.referencesJson);
+                        }
+                        updateTitlebar();
+                        scrollToBottom();
+                    } else {
+                        messagesDiv.innerHTML = '<div class="empty-conv"><div class="empty-icon">📝</div><h3>没有消息</h3><p>开始提问吧</p></div>';
+                    }
+                })
+                .catch(() => {
+                    messagesDiv.innerHTML = '<div class="empty-conv"><div class="empty-icon">⚠️</div><h3>网络错误</h3><p>请检查网络连接后刷新</p></div>';
+                });
+        }
+
+        // ===== 提取文件名（从【】标记中） =====
+        function extractFilename(snippet) {
+            const m = snippet && snippet.match(/【(.+?)】/);
+            return m ? m[1] : null;
+        }
+
+        function toggleSendBtn(el) {
+            document.getElementById('sendBtn').disabled = !el.value.trim();
+        }
+
+        // ===== 复制回答 =====
+        function copyAnswer(btn) {
+            const textDiv = btn.closest('.msg-text').querySelector('.msg-text-body') || btn.closest('.msg-text');
+            const text = textDiv.textContent;
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+                navigator.clipboard.writeText(text).then(function() {
+                    btn.textContent = '✓';
+                    btn.classList.add('copied');
+                    setTimeout(function() { btn.textContent = '📋'; btn.classList.remove('copied'); }, 2000);
+                });
+            } else {
+                const ta = document.createElement('textarea');
+                ta.value = text; ta.style.position = 'fixed'; ta.style.opacity = '0';
+                document.body.appendChild(ta); ta.select();
+                document.execCommand('copy'); document.body.removeChild(ta);
+                btn.textContent = '✓'; btn.classList.add('copied');
+                setTimeout(function() { btn.textContent = '📋'; btn.classList.remove('copied'); }, 2000);
+            }
+        }
+
+        // ===== 单条消息渲染 =====
+        function appendMessage(role, content, refsJson) {
+            const messagesDiv = document.getElementById('messages');
+            const isUser = role === 0;
+
+            const pairDiv = document.createElement('div');
+            pairDiv.className = 'msg-pair';
+
+            const msgDiv = document.createElement('div');
+            msgDiv.className = isUser ? 'msg msg-user' : 'msg msg-ai';
+
+            let html = '<div class="msg-avatar">' + (isUser ? USER_ICON : AI_ICON) + '</div>';
+            html += '<div class="msg-content' + (!isUser && refsJson ? ' has-refs' : '') + '">';
+
+            // AI 消息添加复制按钮
+            if (!isUser) {
+                html += '<div class="msg-text"><button class="btn-copy-answer" onclick="copyAnswer(this)" title="复制答案">📋</button><div class="msg-text-body">';
+            } else {
+                html += '<div class="msg-text">';
+            }
+
+            const isLong = !isUser && content && content.length > 400;
+            if (isLong) {
+                html += '<div class="msg-collapse-wrap collapsed">';
+            }
+
+            html += marked.parse(content || '');
+
+            if (isUser) {
+                html += '</div>'; // msg-text
+            }
+
+            if (isLong) {
+                html += '</div>'; // msg-collapse-wrap
+                html += '<button class="msg-collapse-toggle" onclick="toggleCollapse(this)">展开全文 ▼</button>';
+                html += '</div>'; // msg-text-body end
+                html += '</div>'; // msg-text
+            } else if (!isUser) {
+                html += '</div></div>'; // msg-text-body + msg-text
+            }
+
+            // --- 来源按钮（AI 右下角）---
+            if (!isUser && refsJson) {
+                try {
+                    const refs = typeof refsJson === 'string' ? JSON.parse(refsJson) : refsJson;
+                    if (refs && refs.length > 0) {
+                        html += '<button class="ref-toggle" onclick="toggleRefs(this)">' +
+                            '📄 ' + refs.length + ' 个来源 <span class="ref-arrow">▼</span></button>';
+                        html += '<div class="ref-cards">';
+                        for (const ref of refs) {
+                            const scorePct = ref.score ? (ref.score * 100).toFixed(0) : '?';
+                            const fname = extractFilename(ref.snippet) || '文档片段';
+                            const snippet = (ref.snippet || '').replace(/^【.+?】\s*/, '').substring(0, 150);
+                            html += '<div class="ref-card">' +
+                                '<div class="ref-card-header">' +
+                                '<span class="ref-card-file">📄 ' + fname + '</span>' +
+                                '<span class="ref-card-score">' + scorePct + '%</span>' +
+                                '</div>' +
+                                '<blockquote>' + snippet + '</blockquote>' +
+                                '</div>';
+                        }
+                        html += '</div>';
+                    }
+                } catch(e) {}
+            }
+
+            html += '</div>'; // msg-content
+            msgDiv.innerHTML = html;
+            pairDiv.appendChild(msgDiv);
+            messagesDiv.appendChild(pairDiv);
+
+            const msgText = pairDiv.querySelector('.msg-text');
+            if (msgText) {
+                enhanceCodeBlocks(msgText);
+                if (!isUser && refsJson) {
+                    processRefLinks(msgText, refsJson);
+                }
+            }
+
+            scrollToBottom();
+        }
+
+        // ===== 来源折叠 =====
+        function toggleRefs(btn) {
+            const content = btn.closest('.msg-content');
+            content.classList.toggle('expanded-refs');
+            btn.classList.toggle('open');
+        }
+
+        // ===== 引用详情（事件委托） =====
+        document.addEventListener('click', function(e) {
+            const detailBtn = e.target.closest('.btn-ref-detail');
+            if (detailBtn) {
+                try {
+                    const ref = JSON.parse(detailBtn.dataset.ref);
+                    const scorePct = ref.score ? (ref.score * 100).toFixed(0) : '?';
+                    const fname = extractFilename(ref.snippet) || '文档片段';
+                    const snippet = (ref.snippet || '').replace(/^【.+?】\s*/, '');
+                    document.getElementById('refContent').innerHTML =
+                        '<div class="ref-detail">' +
+                        '<div class="ref-source-label"><strong>📄 ' + fname + '</strong></div>' +
+                        '<p><strong>相关度:</strong> ' + scorePct + '%</p>' +
+                        '<div class="ref-score-bar"><div class="ref-score-fill" style="width:' + scorePct + '%"></div></div>' +
+                        '<p><strong>原文片段:</strong></p>' +
+                        '<blockquote>' + snippet + '</blockquote>' +
+                        '</div>';
+                    document.getElementById('refModal').style.display = 'flex';
+                } catch(e) {
+                    console.error('引用解析失败', e);
+                }
+                return;
+            }
+
+            const badge = e.target.closest('.ref-badge');
+            if (badge) {
+                try {
+                    const ref = JSON.parse(badge.dataset.ref);
+                    const scorePct = ref.score ? (ref.score * 100).toFixed(0) : '?';
+                    document.getElementById('refContent').innerHTML =
+                        '<div class="ref-detail">' +
+                        (ref.source ? '<div class="ref-source-label"><span>🔗 来源: ' + ref.source + '</span></div>' : '') +
+                        '<p><strong>相关度:</strong> ' + scorePct + '%</p>' +
+                        '<div class="ref-score-bar"><div class="ref-score-fill" style="width:' + scorePct + '%"></div></div>' +
+                        '<p><strong>片段:</strong></p>' +
+                        '<blockquote>' + (ref.snippet || '无内容') + '</blockquote>' +
+                        '</div>';
+                    document.getElementById('refModal').style.display = 'flex';
+                } catch(e) {
+                    console.error('引用解析失败', e);
+                }
+            }
+        });
+
+        function hideRefModal() {
+            document.getElementById('refModal').style.display = 'none';
+        }
+
+        // ===== 代码块增强 =====
+        function enhanceCodeBlocks(container) {
+            const pres = container.querySelectorAll('pre');
+            pres.forEach(function(pre) {
+                if (pre.closest('.code-block-wrap')) return;
+
+                const code = pre.querySelector('code');
+                if (!code) return;
+
+                let lang = '';
+                if (code.className) {
+                    const m = code.className.match(/language-(\w+)/);
+                    if (m) lang = m[1];
+                }
+                if (!lang) {
+                    const text = code.textContent.trim();
+                    if (text.includes('public class') || text.includes('import ')) lang = 'java';
+                    else if (text.startsWith('<') && text.includes('</')) lang = 'xml';
+                    else if (text.startsWith('curl') || text.startsWith('sudo') || text.startsWith('export')) lang = 'bash';
+                    else if (text.startsWith('{') && text.includes('"')) lang = 'json';
+                    else if (text.startsWith('SELECT') || text.startsWith('INSERT') || text.startsWith('UPDATE')) lang = 'sql';
+                    else lang = 'text';
+                }
+
+                const wrap = document.createElement('div');
+                wrap.className = 'code-block-wrap';
+
+                const header = document.createElement('div');
+                header.className = 'code-header';
+                header.innerHTML = '<span class="code-lang">' + lang + '</span>' +
+                    '<button class="code-copy" onclick="copyCode(this)">复制</button>';
+
+                pre.parentNode.insertBefore(wrap, pre);
+                wrap.appendChild(header);
+                wrap.appendChild(pre);
+            });
+        }
+
+        function copyCode(btn) {
+            const wrap = btn.closest('.code-block-wrap');
+            const code = wrap.querySelector('code');
+            const text = code.textContent;
+
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+                navigator.clipboard.writeText(text).then(function() {
+                    btn.textContent = '已复制';
+                    btn.classList.add('copied');
+                    setTimeout(function() {
+                        btn.textContent = '复制';
+                        btn.classList.remove('copied');
+                    }, 2000);
+                });
+            } else {
+                const ta = document.createElement('textarea');
+                ta.value = text;
+                ta.style.position = 'fixed';
+                ta.style.opacity = '0';
+                document.body.appendChild(ta);
+                ta.select();
+                document.execCommand('copy');
+                document.body.removeChild(ta);
+                btn.textContent = '已复制';
+                btn.classList.add('copied');
+                setTimeout(function() {
+                    btn.textContent = '复制';
+                    btn.classList.remove('copied');
+                }, 2000);
+            }
+        }
+
+// ===== 来源引用处理 — [来源N] 转可点击链接 =====
+function processRefLinks(container, refsJson) {
+    try {
+        const refs = typeof refsJson === 'string' ? JSON.parse(refsJson) : refsJson;
+        if (!refs || refs.length === 0) return;
+        // Find all text nodes containing [来源N]
+        const walker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT, null, false);
+        const nodesToReplace = [];
+        while (walker.nextNode()) {
+            const node = walker.currentNode;
+            if (node.nodeValue && /\[来源\d+\]/.test(node.nodeValue)) {
+                nodesToReplace.push(node);
+            }
+        }
+        nodesToReplace.forEach(function(textNode) {
+            const text = textNode.nodeValue;
+            const frag = document.createDocumentFragment();
+            const parts = text.split(/(\[来源\d+\])/g);
+            for (const part of parts) {
+                const m = part.match(/\[来源(\d+)\]/);
+                if (m) {
+                    const idx = parseInt(m[1]);
+                    const ref = refs.find(function(r) { return r.index === idx; });
+                    if (ref) {
+                        const link = document.createElement('a');
+                        link.href = '#';
+                        link.className = 'ref-link';
+                        link.textContent = '[' + m[1] + ']';
+                        link.dataset.ref = JSON.stringify(ref).replace(/'/g, "\\'");
+                        link.onclick = function(e) {
+                            e.preventDefault();
+                            showRefModal(ref);
+                        };
+                        frag.appendChild(link);
+                    } else {
+                        frag.appendChild(document.createTextNode(part));
+                    }
+                } else {
+                    frag.appendChild(document.createTextNode(part));
+                }
+            }
+            textNode.parentNode.replaceChild(frag, textNode);
+        });
+    } catch(e) { console.warn('ref link processing error:', e); }
+}
+
+function showRefModal(ref) {
+    const scorePct = ref.score ? (ref.score * 100).toFixed(0) : '?';
+    const fname = ref.snippet && ref.snippet.match(/【(.+?)】/) ? ref.snippet.match(/【(.+?)】/)[1] : '文档片段';
+    const snippet = (ref.snippet || '').replace(/^【.+?】\s*/, '');
+    document.getElementById('refContent').innerHTML =
+        '<div class="ref-detail">' +
+        '<div class="ref-source-label"><strong>📄 ' + fname + '</strong></div>' +
+        '<p><strong>相关度:</strong> ' + scorePct + '%</p>' +
+        '<div class="ref-score-bar"><div class="ref-score-fill" style="width:' + scorePct + '%"></div></div>' +
+        '<p><strong>原文片段:</strong></p>' +
+        '<blockquote>' + snippet + '</blockquote>' +
+        '</div>';
+    document.getElementById('refModal').style.display = 'flex';
+}
+
+function hideRefModal() {
+    document.getElementById('refModal').style.display = 'none';
+}
+
+function toggleCollapse(btn) {
+    const wrap = btn.previousElementSibling;
+    wrap.classList.toggle('collapsed');
+    btn.textContent = wrap.classList.contains('collapsed') ? '展开全文 ▼' : '收起全文 ▲';
+}
+
+        // ===== 发送问题 =====
+        async function ask() {
+            if (isAsking) return;
+            const input = document.getElementById('questionInput');
+            const question = input.value.trim();
+            if (!question) return;
+
+            isAsking = true;
+            input.value = '';
+            input.style.height = 'auto';
+            const sendBtn = document.querySelector('.btn-send');
+            sendBtn.textContent = '...';
+            sendBtn.disabled = true;
+
+            appendMessage(0, question, null);
+            scrollToBottom();
+
+            const messagesDiv = document.getElementById('messages');
+            const thinkingPair = document.createElement('div');
+            thinkingPair.className = 'msg-pair';
+            thinkingPair.id = 'thinkingPair';
+            thinkingPair.innerHTML = '<div class="msg msg-ai"><div class="msg-avatar">' + AI_ICON + '</div><div class="msg-content"><div class="msg-text"><span class="thinking thinking-text">正在分析文档<span class="thinking-dots"></span></span></div></div></div>';
+            messagesDiv.appendChild(thinkingPair);
+            scrollToBottom();
+
+            try {
+                const resp = await fetch('/chat/api/ask', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({
+                        conversationId: currentConvId,
+                        kbId: kbId,
+                        question: question
+                    })
+                });
+                const data = await resp.json();
+                thinkingPair.remove();
+
+                if (data.code === 200) {
+                    messageCount++;
+                    appendMessage(1, data.data.answer, data.data.references);
+                    updateTitlebar();
+                } else {
+                    appendMessage(1, '错误: ' + data.message, null);
+                }
+            } catch (e) {
+                document.getElementById('thinkingPair')?.remove();
+                appendMessage(1, '网络错误: ' + e.message, null);
+            }
+
+            isAsking = false;
+            sendBtn.textContent = '发送';
+            sendBtn.disabled = false;
+            scrollToBottom();
+        }
+
+        function scrollToBottom() {
+            const messagesDiv = document.getElementById('messages');
+            messagesDiv.scrollTop = messagesDiv.scrollHeight;
+        }
+
+        loadConversations();
+        if (currentConvId) {
+            loadMessages();
+            document.getElementById('inputArea').style.display = 'flex';
+        } else {
+            document.getElementById('welcomeBlock').style.display = 'block';
+        }
+    </script>
+</body>
+</html>
