@@ -6,6 +6,7 @@
 ![MySQL](https://img.shields.io/badge/MySQL-8.0-orange?logo=mysql)
 ![Redis](https://img.shields.io/badge/Redis-7.0-red?logo=redis)
 ![License](https://img.shields.io/badge/License-MIT-yellow)
+
 纯 Java + Spring Boot 3 + MyBatis-Plus + 火山引擎 Ark API 实现的 RAG 问答系统。
 不需要 Docker、Python、向量数据库，开箱即跑。
 
