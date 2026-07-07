@@ -21,6 +21,8 @@
 | **多格式文档支持** | PDF/TXT/MD/DOCX/PPTX/HTML/CSV 自动解析 |
 | **代码高亮渲染** | Markdown 渲染 + highlight.js 代码高亮 |
 | **引用来源追溯** | 每条回答自动标记来源，点击查看详情 |
+| **防幻觉机制** | 严格基于文档内容回答，未找到信息时明确说明 |
+| **异常重试机制** | 网络超时自动重试，指数退避策略 |
 | **Docker 一键部署** | `docker-compose up` 启动全部服务 |
 | **纯内存向量库** | 不依赖第三方向量数据库，启动时从 MySQL 加载 |
 | **Redis 分布式会话** | 支持多实例部署的会话管理 |
@@ -103,6 +105,7 @@ npm run dev
 | 缓存/Session | Redis | 7.0 | 会话管理 |
 | AI 模型 | 火山引擎 Ark API | - | 大语言模型 + 嵌入 |
 | 文档解析 | Apache Tika | 2.9.2 | 多格式文档提取 |
+| 安全 | Spring Security | - | 认证授权 + IDOR 保护 |
 | 部署 | Docker / Docker Compose | - | 容器化部署 |
 
 ---
@@ -158,6 +161,9 @@ npm run dev
 | 上传目录 | `application.yml` | `./uploads` | 文档存储位置 |
 | 嵌入模型 | `app.openai.embedding-model` | `doubao-embedding-vision-251215` | 向量化模型 |
 | 对话模型 | `app.openai.chat-model` | `doubao-seed-1-8-251228` | 大语言模型 |
+| 温度参数 | `app.openai.temperature` | `0.1` | 降低生成随机性，减少幻觉 |
+| 最大重试次数 | `app.openai.max-retries` | `3` | API 调用失败重试次数 |
+| 重试延迟 | `app.openai.retry-delay-ms` | `1000` | 重试间隔（毫秒），指数退避 |
 | 相似度阈值 | `VectorStore.search()` | `0.3` | 检索匹配阈值 |
 | 检索条数 | `VectorStore.search()` | `5` | Top-K 检索数量 |
 
@@ -206,9 +212,9 @@ rag-kb/
 │   │   ├── DocumentController.java      # 文档管理
 │   │   └── ChatController.java          # 对话/SSE 流式
 │   ├── service/
-│   │   ├── UserService / KbService / DocumentService  # 业务服务
+│   │   ├── UserService / KbService / DocumentService  # 业务服务（含归属校验）
 │   │   ├── DocumentParser / TextChunker / EmbeddingService  # 文档处理
-│   │   ├── LlmService / ChatService / PromptTemplate  # AI 服务
+│   │   ├── LlmService / ChatService / PromptTemplate  # AI 服务（防幻觉 + 重试）
 │   │   ├── SseService / VectorStore / VectorStoreLoader  # 检索服务
 │   │   ├── CaptchaService / VoiceService  # 辅助服务
 │   ├── model/
@@ -323,6 +329,34 @@ Windows 文件锁定问题。先手动删除 `target/` 目录，或使用 `mvn s
 **Q: AI 回答时头像和内容消失？**
 
 已修复。消息渲染结构已优化，避免重复嵌套导致的样式冲突。
+
+**Q: 网络不稳定导致 AI 回答失败？**
+
+已优化。系统实现了自动重试机制，最多重试 3 次，采用指数退避策略（1s → 2s → 4s），提高网络容错能力。
+
+**Q: AI 回答存在幻觉（编造信息）？**
+
+已优化。
+1. 降低温度参数至 0.1，减少生成随机性
+2. 强化系统提示词约束，要求严格基于文档内容回答
+3. 未找到相关信息时明确提示，不编造答案
+4. 检索结果为空时，自动添加提示说明回答基于训练知识
+
+**Q: 权限安全问题（IDOR）？**
+
+已修复。所有接口增加了归属校验：
+- 文档列表/删除：校验 `user_id`，只能访问自己的文档
+- 知识库删除：校验 `user_id`，只能删除自己的知识库
+- 消息获取：校验 `user_id`，只能查看自己的对话消息
+- 所有接口增加登录状态校验
+
+**Q: AI 返回内容格式异常（包含 HTML 标签）？**
+
+已优化。后端增加了内容清理机制：
+- 自动检测并清理 HTML 标签
+- 修复缺失的代码块标记
+- 校验来源引用编号有效性
+- 前端增加渲染失败的友好提示
 
 ---
 

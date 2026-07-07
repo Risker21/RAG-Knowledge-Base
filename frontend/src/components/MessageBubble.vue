@@ -27,23 +27,62 @@ function decodeHtmlEntities(text: string): string {
   return textarea.value
 }
 
+function cleanContent(content: string): string {
+  if (!content) return ''
+  
+  let cleaned = content.trim()
+  
+  cleaned = cleaned.replace(/\[DONE\]/gi, '')
+  
+  cleaned = cleaned.replace(/^\s*\{\s*\}\s*$/, '')
+  cleaned = cleaned.replace(/^\s*\[\s*\]\s*$/, '')
+  
+  return cleaned
+}
+
+function detectAndFixFormat(content: string): string {
+  if (!content) return ''
+  
+  if (content.includes('hljs-keyword') || content.includes('hljs-string') || content.includes('hljs-comment')) {
+    const decoded = decodeHtmlEntities(content)
+    const wrapped = decoded.replace(/<pre[^>]*>(.*?)<\/pre>/gis, '<pre><code>$1</code></pre>')
+    return wrapped
+  }
+  
+  if (content.includes('&lt;') && content.includes('&gt;') && content.includes('class=')) {
+    const decoded = decodeHtmlEntities(content)
+    return decoded
+  }
+  
+  return null
+}
+
 const html = computed(() => {
   try {
-    const content = props.content || ''
-    if (content.includes('hljs-keyword') || content.includes('hljs-string') || content.includes('hljs-comment')) {
-      const decoded = decodeHtmlEntities(content)
-      const wrapped = decoded.replace(/<pre[^>]*>(.*?)<\/pre>/gis, '<pre><code>$1</code></pre>')
-      return wrapped
+    const content = cleanContent(props.content || '')
+    
+    if (!content) {
+      return '<div class="error-message">😔 AI 服务返回内容为空，请稍后重试</div>'
     }
+    
+    const fixedContent = detectAndFixFormat(content)
+    if (fixedContent) {
+      return fixedContent
+    }
+    
     const decodedContent = decodeHtmlEntities(content)
     return marked(decodedContent)
-  } catch {
-    return props.content
+  } catch (error) {
+    console.error('Markdown rendering error:', error)
+    return '<div class="error-message">😔 内容渲染失败，请稍后重试</div>'
   }
 })
 
 const collapsed = ref(true)
-const isLong = computed(() => props.content && props.content.length > 400)
+const isLong = computed(() => {
+  const content = props.content || ''
+  return content.length > 400 && !content.includes('error') && !content.includes('失败')
+})
 const isUser = computed(() => props.role === 0)
 
 function toggleCollapse() {
@@ -197,4 +236,13 @@ const AI_ICON = '<svg viewBox="0 0 24 24" width="16" height="16" fill="currentCo
 }
 :deep(pre) { background: #1C1A18 !important; color: #cdd6f4; padding: 16px; border-radius: 8px; overflow-x: auto; margin: 12px 0; font-size: 13px; line-height: 1.5; }
 :deep(code) { font-size: 13px; font-family: var(--mono); }
+
+.error-message {
+  color: var(--cinnabar);
+  font-size: 14px;
+  line-height: 1.6;
+  padding: 8px;
+  background: var(--cinnabar-dim);
+  border-radius: var(--radius);
+}
 </style>

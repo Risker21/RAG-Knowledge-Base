@@ -16,6 +16,8 @@ import org.springframework.stereotype.Service;
 
 import java.util.*;
 import java.util.function.Consumer;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 import static com.baomidou.mybatisplus.core.toolkit.Wrappers.lambdaQuery;
@@ -34,6 +36,10 @@ public class ChatService {
     private final DocumentMapper documentMapper;
     private final DocumentService documentService;
     private final ObjectMapper objectMapper;
+
+    private static final Pattern SOURCE_PATTERN = Pattern.compile("\\[来源(\\d+)\\]", Pattern.CASE_INSENSITIVE);
+    private static final Pattern HTML_TAG_PATTERN = Pattern.compile("<[^>]+>");
+    private static final Pattern CODE_BLOCK_PATTERN = Pattern.compile("```\\w*\\s*([\\s\\S]*?)```", Pattern.DOTALL);
 
     public Conversation createConversation(Long userId, Long kbId, String title) {
         Conversation conv = new Conversation();
@@ -86,7 +92,6 @@ public class ChatService {
     }
 
     public ChatResponse ask(Long conversationId, Long kbId, String question) {
-        // 1. 做 Embedding
         float[] queryVec = embeddingService.embed(question);
 
         if (queryVec == null) {
@@ -98,14 +103,13 @@ public class ChatService {
             return resp;
         }
 
-        // 2-4. 检索 + 构建 Prompt
         List<SearchResult> results = new ArrayList<>();
         RAGContext ctx = buildRAGContext(kbId, question, queryVec, results);
 
-        // 5. 调用 LLM
         String answer = llmService.chat(ctx.systemPrompt, ctx.userMessage);
 
-        // 6-9. 构建引用 + 保存
+        answer = validateAndCleanAnswer(answer, results);
+
         return finalizeResponse(conversationId, question, answer, results);
     }
 
@@ -128,12 +132,96 @@ public class ChatService {
 
         String answer = llmService.chatStream(ctx.systemPrompt, ctx.userMessage, onToken);
 
+        answer = validateAndCleanAnswer(answer, results);
+
         return finalizeResponse(conversationId, question, answer, results);
     }
 
+    private String validateAndCleanAnswer(String answer, List<SearchResult> results) {
+        if (answer == null || answer.trim().isEmpty()) {
+            return "😔 AI 服务返回内容为空，请稍后重试";
+        }
+
+        String cleaned = answer.trim();
+
+        cleaned = cleanHtmlTags(cleaned);
+
+        cleaned = fixCodeBlocks(cleaned);
+
+        cleaned = validateSourceReferences(cleaned, results.size());
+
+        if (cleaned.length() > 10000) {
+            log.warn("回答内容过长，截断至 10000 字符");
+            cleaned = cleaned.substring(0, 10000) + "\n\n（内容过长已截断）";
+        }
+
+        return cleaned;
+    }
+
+    private String cleanHtmlTags(String content) {
+        if (content.contains("<span") || content.contains("<div") || content.contains("<p")) {
+            log.debug("检测到 HTML 标签，尝试清理");
+            String textOnly = HTML_TAG_PATTERN.matcher(content).replaceAll("");
+            textOnly = textOnly.replaceAll("&lt;", "<").replaceAll("&gt;", ">")
+                    .replaceAll("&amp;", "&").replaceAll("&quot;", "\"");
+            if (!textOnly.isEmpty() && textOnly.length() < content.length()) {
+                return textOnly;
+            }
+        }
+        return content;
+    }
+
+    private String fixCodeBlocks(String content) {
+        Matcher matcher = CODE_BLOCK_PATTERN.matcher(content);
+        if (matcher.find()) {
+            return content;
+        }
+        if (content.contains("import java.") || content.contains("public class")
+                || content.contains("function ") || content.contains("def ")
+                || content.contains("console.log")) {
+            log.debug("检测到代码内容但缺少代码块标记，尝试包裹");
+            content = "```java\n" + content + "\n```";
+        }
+        return content;
+    }
+
+    private String validateSourceReferences(String content, int maxSourceIndex) {
+        Matcher matcher = SOURCE_PATTERN.matcher(content);
+        boolean hasInvalidSource = false;
+
+        while (matcher.find()) {
+            int sourceIndex = Integer.parseInt(matcher.group(1));
+            if (sourceIndex > maxSourceIndex) {
+                log.warn("检测到无效的来源引用 [来源{}]，最大有效来源为 {}", sourceIndex, maxSourceIndex);
+                hasInvalidSource = true;
+                break;
+            }
+        }
+
+        if (hasInvalidSource) {
+            content = SOURCE_PATTERN.matcher(content).replaceAll("[来源]");
+        }
+
+        if (maxSourceIndex > 0 && !SOURCE_PATTERN.matcher(content).find()) {
+            log.debug("检索到 {} 条结果但回答中未标注来源", maxSourceIndex);
+        }
+
+        return content;
+    }
+
     private RAGContext buildRAGContext(Long kbId, String question, float[] queryVec, List<SearchResult> results) {
-        results.addAll(vectorStore.search(kbId, queryVec, 5, 0.3));
-        log.debug("RAG 检索到 {} 条结果", results.size());
+        List<SearchResult> rawResults = vectorStore.search(kbId, queryVec, 5, 0.3);
+
+        for (SearchResult r : rawResults) {
+            if (r.getScore() >= 0.3) {
+                results.add(r);
+            } else {
+                log.debug("跳过低相似度结果 (score={}): {}", r.getScore(),
+                        r.getText().substring(0, Math.min(50, r.getText().length())));
+            }
+        }
+
+        log.debug("RAG 检索到 {} 条有效结果", results.size());
 
         List<Document> kbDocs = documentMapper.selectList(
                 lambdaQuery(Document.class).eq(Document::getKbId, kbId));
@@ -144,12 +232,14 @@ public class ChatService {
 
         if (results.isEmpty()) {
             if (kbDocs.isEmpty()) {
-                systemPrompt = "You are a helpful AI assistant. Answer the user's question concisely and accurately in Chinese.";
+                systemPrompt = "你是一个友好的 AI 助手。请用中文简洁准确地回答用户的问题。"
+                        + "\n注意：当前知识库为空，请基于你的训练知识回答，但请明确说明这是基于你的知识，不是来自知识库。";
             } else {
                 systemPrompt = "你是知识库问答助手。当前知识库包含以下文档：\n"
                         + docContext
-                        + "\n用户的问题可能是关于这些文档内容的。请根据你对这些技术领域的了解，尽力回答用户的问题。"
-                        + "如果用户询问文档概况，请基于上述文档列表回答。";
+                        + "\n\n重要提示：当前未检索到与问题直接相关的文档片段。"
+                        + "如果用户的问题可以从上述文档列表中推断，请基于文档列表回答；"
+                        + "否则请明确说明文档中没有相关信息，并基于你的知识提供参考回答，但要清楚区分哪些是来自文档的，哪些是来自你的知识。";
             }
             userMessage = question;
         } else {
@@ -170,7 +260,6 @@ public class ChatService {
 
     private ChatResponse finalizeResponse(Long conversationId, String question, String answer,
             List<SearchResult> results) {
-        // 构建引用列表
         List<Map<String, Object>> references = new ArrayList<>();
         for (int i = 0; i < results.size(); i++) {
             SearchResult r = results.get(i);
@@ -184,10 +273,12 @@ public class ChatService {
 
         String finalAnswer = answer;
 
-        // 保存消息
+        if (results.isEmpty() && !answer.contains("未找到") && !answer.contains("暂无")) {
+            finalAnswer = answer + "\n\n💡 提示：以上回答基于 AI 的训练知识，可能不完全准确。建议上传相关文档以获取更精确的答案。";
+        }
+
         saveMessages(conversationId, question, finalAnswer, references);
 
-        // 更新对话标题
         Conversation conv = conversationMapper.selectById(conversationId);
         if (conv != null && "New Chat".equals(conv.getTitle())) {
             conv.setTitle(question.length() > 50 ? question.substring(0, 50) + "..." : question);
