@@ -6,7 +6,7 @@ server:
 
 spring:
   config:
-    import: classpath:application-secrets.yml
+    import: optional:classpath:application-secrets.yml
   datasource:
     url: jdbc:mysql://localhost:3306/rag_kb?serverTimezone=Asia/Shanghai&rewriteBatchedStatements=true&useServerPrepStmts=true
     username: root

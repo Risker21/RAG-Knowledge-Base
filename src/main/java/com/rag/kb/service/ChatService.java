@@ -15,6 +15,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
 import java.util.*;
+import java.util.function.Consumer;
 import java.util.stream.Collectors;
 
 import static com.baomidou.mybatisplus.core.toolkit.Wrappers.lambdaQuery;
@@ -53,8 +54,10 @@ public class ChatService {
 
     public void deleteConversation(Long conversationId, Long userId) {
         Conversation conv = conversationMapper.selectById(conversationId);
-        if (conv == null) throw new RuntimeException("对话不存在");
-        if (!conv.getUserId().equals(userId)) throw new RuntimeException("无权删除此对话");
+        if (conv == null)
+            throw new RuntimeException("对话不存在");
+        if (!conv.getUserId().equals(userId))
+            throw new RuntimeException("无权删除此对话");
         messageMapper.delete(lambdaQuery(Message.class)
                 .eq(Message::getConversationId, conversationId));
         conversationMapper.deleteById(conversationId);
@@ -80,25 +83,51 @@ public class ChatService {
             return resp;
         }
 
-        // 2. 检索相关段落（按 kbId 分区）
-        List<SearchResult> results = vectorStore.search(kbId, queryVec, 5, 0.3);
-        log.debug("RAG 检索到 {} 条结果", results.size());
-        for (SearchResult r : results) {
-            log.debug("  score={} meta={} text={}...", String.format("%.4f", r.getScore()),
-                    r.getMeta(), r.getText().length() > 80 ? r.getText().substring(0, 80) : r.getText());
+        // 2-4. 检索 + 构建 Prompt
+        List<SearchResult> results = new ArrayList<>();
+        RAGContext ctx = buildRAGContext(kbId, question, queryVec, results);
+
+        // 5. 调用 LLM
+        String answer = llmService.chat(ctx.systemPrompt, ctx.userMessage);
+
+        // 6-9. 构建引用 + 保存
+        return finalizeResponse(conversationId, question, answer, results);
+    }
+
+    public ChatResponse askStream(Long conversationId, Long kbId, String question, Consumer<String> onToken) {
+        float[] queryVec = embeddingService.embed(question);
+
+        if (queryVec == null) {
+            String msg = "⚠️ 嵌入向量服务不可用";
+            onToken.accept(msg);
+            ChatResponse resp = new ChatResponse();
+            resp.setAnswer(msg);
+            resp.setReferences(new ArrayList<>());
+            resp.setConversationId(conversationId);
+            saveMessages(conversationId, question, msg, resp.getReferences());
+            return resp;
         }
 
-        // 3. 获取当前知识库的文档列表，作为上下文
+        List<SearchResult> results = new ArrayList<>();
+        RAGContext ctx = buildRAGContext(kbId, question, queryVec, results);
+
+        String answer = llmService.chatStream(ctx.systemPrompt, ctx.userMessage, onToken);
+
+        return finalizeResponse(conversationId, question, answer, results);
+    }
+
+    private RAGContext buildRAGContext(Long kbId, String question, float[] queryVec, List<SearchResult> results) {
+        results.addAll(vectorStore.search(kbId, queryVec, 5, 0.3));
+        log.debug("RAG 检索到 {} 条结果", results.size());
+
         List<Document> kbDocs = documentMapper.selectList(
                 lambdaQuery(Document.class).eq(Document::getKbId, kbId));
         String docContext = buildDocContext(kbDocs);
 
-        // 4. 构建 Prompt
         String systemPrompt;
         String userMessage;
 
         if (results.isEmpty()) {
-            // 没有检索到相关文档 → 注入文档列表上下文，让 AI 知道当前知识库有什么文档
             if (kbDocs.isEmpty()) {
                 systemPrompt = "You are a helpful AI assistant. Answer the user's question concisely and accurately in Chinese.";
             } else {
@@ -108,17 +137,25 @@ public class ChatService {
                         + "如果用户询问文档概况，请基于上述文档列表回答。";
             }
             userMessage = question;
-            log.debug("未检索到相关文档，使用文档上下文模式（{} 个文档）", kbDocs.size());
         } else {
             systemPrompt = promptTemplate.buildSystemPrompt(results) + "\n\n当前知识库中的文档列表：\n" + docContext;
             userMessage = promptTemplate.buildUserMessage(question);
-            log.debug("检索到 {} 条相关文档，使用 RAG 模式", results.size());
         }
 
-        // 5. 调用 LLM
-        String answer = llmService.chat(systemPrompt, userMessage);
+        RAGContext ctx = new RAGContext();
+        ctx.systemPrompt = systemPrompt;
+        ctx.userMessage = userMessage;
+        return ctx;
+    }
 
-        // 6. 构建引用列表
+    private static class RAGContext {
+        String systemPrompt;
+        String userMessage;
+    }
+
+    private ChatResponse finalizeResponse(Long conversationId, String question, String answer,
+            List<SearchResult> results) {
+        // 构建引用列表
         List<Map<String, Object>> references = new ArrayList<>();
         for (int i = 0; i < results.size(); i++) {
             SearchResult r = results.get(i);
@@ -130,15 +167,12 @@ public class ChatService {
             references.add(ref);
         }
 
-        // 7. 替换 [Source N] 为 [来源N]
-        for (int i = 0; i < results.size(); i++) {
-            answer = answer.replace("[Source " + (i + 1) + "]", "[来源" + (i + 1) + "]");
-        }
+        String finalAnswer = answer;
 
-        // 8. 保存消息
-        saveMessages(conversationId, question, answer, references);
+        // 保存消息
+        saveMessages(conversationId, question, finalAnswer, references);
 
-        // 9. 更新对话标题
+        // 更新对话标题
         Conversation conv = conversationMapper.selectById(conversationId);
         if (conv != null && "New Chat".equals(conv.getTitle())) {
             conv.setTitle(question.length() > 50 ? question.substring(0, 50) + "..." : question);
@@ -146,7 +180,7 @@ public class ChatService {
         }
 
         ChatResponse resp = new ChatResponse();
-        resp.setAnswer(answer);
+        resp.setAnswer(finalAnswer);
         resp.setReferences(references);
         resp.setConversationId(conversationId);
         return resp;
@@ -154,7 +188,8 @@ public class ChatService {
 
     /** 构建文档列表上下文文本 */
     private String buildDocContext(List<Document> docs) {
-        if (docs.isEmpty()) return "（当前知识库暂无文档）";
+        if (docs.isEmpty())
+            return "（当前知识库暂无文档）";
         return docs.stream()
                 .map(d -> "  - " + d.getOriginalName()
                         + "（" + formatFileSize(d.getFileSize()) + "）"
@@ -163,13 +198,24 @@ public class ChatService {
     }
 
     private String formatFileSize(Long size) {
-        if (size == null) return "未知大小";
-        if (size < 1024) return size + " B";
-        if (size < 1024 * 1024) return String.format("%.1f KB", size / 1024.0);
+        if (size == null)
+            return "未知大小";
+        if (size < 1024)
+            return size + " B";
+        if (size < 1024 * 1024)
+            return String.format("%.1f KB", size / 1024.0);
         return String.format("%.1f MB", size / (1024.0 * 1024));
     }
 
-    private void saveMessages(Long conversationId, String question, String answer, List<Map<String, Object>> references) {
+    private void saveMessages(Long conversationId, String question, String answer,
+            List<Map<String, Object>> references) {
+        Conversation conv = conversationMapper.selectById(conversationId);
+        if (conv != null
+                && (conv.getTitle() == null || conv.getTitle().isEmpty() || "New Chat".equals(conv.getTitle()))) {
+            conv.setTitle(question.length() > 30 ? question.substring(0, 30) + "..." : question);
+            conversationMapper.updateById(conv);
+        }
+
         Message userMsg = new Message();
         userMsg.setConversationId(conversationId);
         userMsg.setRole(0);
@@ -181,7 +227,8 @@ public class ChatService {
         aiMsg.setRole(1);
         aiMsg.setContent(answer);
         try {
-            aiMsg.setReferencesJson(objectMapper.writeValueAsString(references != null ? references : new ArrayList<>()));
+            aiMsg.setReferencesJson(
+                    objectMapper.writeValueAsString(references != null ? references : new ArrayList<>()));
         } catch (JsonProcessingException e) {
             aiMsg.setReferencesJson("[]");
         }

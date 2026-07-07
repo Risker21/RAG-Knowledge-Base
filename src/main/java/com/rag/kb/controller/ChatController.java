@@ -1,67 +1,36 @@
 package com.rag.kb.controller;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.rag.kb.model.dto.ApiResult;
 import com.rag.kb.model.dto.ChatRequest;
 import com.rag.kb.model.dto.ChatResponse;
 import com.rag.kb.model.entity.Conversation;
 import com.rag.kb.model.entity.Message;
 import com.rag.kb.service.ChatService;
-import com.rag.kb.service.DocumentService;
+import com.rag.kb.service.SseService;
 import com.rag.kb.service.VoiceService;
 import jakarta.servlet.http.HttpSession;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.stereotype.Controller;
-import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
+import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.CompletableFuture;
 
 @Slf4j
-@Controller
+@RestController
 @RequestMapping("/chat")
 @RequiredArgsConstructor
 public class ChatController {
 
     private final ChatService chatService;
-    private final DocumentService documentService;
     private final VoiceService voiceService;
-
-    @GetMapping("/{kbId}")
-    public String chatPage(@PathVariable Long kbId,
-                           @RequestParam(required = false) Long convId,
-                           HttpSession session,
-                           Model model) {
-        Long userId = (Long) session.getAttribute("userId");
-        if (userId == null) return "redirect:/login";
-
-        model.addAttribute("kbId", kbId);
-        model.addAttribute("convId", convId);
-        model.addAttribute("username", session.getAttribute("username"));
-
-        // 加载该知识库的文档到内存（忽略失败，不影响页面加载）
-        try {
-            documentService.loadKbChunksToMemory(kbId);
-        } catch (Exception e) {
-            // 加载失败不影响页面展示，只是对话时检索不到内容
-        }
-
-        // 对话历史列表
-        List<Conversation> convs = chatService.listConversations(userId, kbId);
-        model.addAttribute("conversations", convs);
-
-        // 如果指定了 convId，加载消息
-        if (convId != null) {
-            List<Message> messages = chatService.getMessages(convId);
-            model.addAttribute("messages", messages);
-            model.addAttribute("currentConvId", convId);
-        }
-
-        return "chat";
-    }
+    private final SseService sseService;
+    private final ObjectMapper objectMapper;
 
     @PostMapping("/api/start")
     @ResponseBody
@@ -90,6 +59,45 @@ public class ChatController {
             return ApiResult.success(resp);
         } catch (Exception e) {
             return ApiResult.error(500, "回答失败: " + e.getMessage());
+        }
+    }
+
+    @GetMapping("/api/ask/stream")
+    public SseEmitter askStream(@SessionAttribute("userId") Long userId,
+                                @RequestParam Long conversationId,
+                                @RequestParam Long kbId,
+                                @RequestParam String question) {
+        if (userId == null) return null;
+        String convKey = userId + ":" + conversationId;
+        SseEmitter emitter = sseService.createEmitter(convKey);
+
+        CompletableFuture.runAsync(() -> {
+            try {
+                ChatResponse response = chatService.askStream(conversationId, kbId, question,
+                        token -> sendSseToken(convKey, token));
+
+                Map<String, Object> doneMsg = new HashMap<>();
+                doneMsg.put("type", "done");
+                doneMsg.put("references", response.getReferences());
+                sseService.send(convKey, objectMapper.writeValueAsString(doneMsg));
+                sseService.complete(convKey);
+            } catch (Exception e) {
+                log.error("SSE stream error", e);
+                sseService.error(convKey, e.getMessage());
+            }
+        });
+
+        return emitter;
+    }
+
+    private void sendSseToken(String convKey, String token) {
+        try {
+            Map<String, String> msg = new HashMap<>();
+            msg.put("type", "token");
+            msg.put("content", token);
+            sseService.send(convKey, objectMapper.writeValueAsString(msg));
+        } catch (Exception e) {
+            log.warn("Failed to send SSE token", e);
         }
     }
 

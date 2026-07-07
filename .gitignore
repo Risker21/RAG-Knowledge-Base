@@ -12,9 +12,7 @@ uploads/
 
 # Secrets and local configuration
 application-secrets.yml
-*.env
 .env
-.env.*
 secrets/
 *credentials*
 *.secret
@@ -22,6 +20,10 @@ secrets/
 *.pem
 *.p12
 *.pfx
+
+# Frontend build artifacts
+frontend/dist/
+frontend/node_modules/
 
 # IDE data sources (may contain connection passwords)
 .idea/dataSources/

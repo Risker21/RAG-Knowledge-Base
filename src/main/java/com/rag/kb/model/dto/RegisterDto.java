@@ -7,4 +7,5 @@ public class RegisterDto {
     private String username;
     private String password;
     private String confirmPassword;
+    private String captcha;
 }
