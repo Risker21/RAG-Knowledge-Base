@@ -38,10 +38,14 @@ public class KbController {
     }
 
     @DeleteMapping("/api/{id}")
-    public ApiResult<Void> delete(@PathVariable Long id) {
+    public ApiResult<Void> delete(@PathVariable Long id, HttpSession session) {
+        Long userId = (Long) session.getAttribute("userId");
+        if (userId == null) return ApiResult.error(401, "未登录");
         try {
-            kbService.delete(id);
+            kbService.delete(id, userId);
             return ApiResult.success(null);
+        } catch (RuntimeException e) {
+            return ApiResult.error(403, e.getMessage());
         } catch (Exception e) {
             return ApiResult.error(500, "删除失败: " + e.getMessage());
         }

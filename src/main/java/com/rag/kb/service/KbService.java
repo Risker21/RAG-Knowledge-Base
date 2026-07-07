@@ -46,15 +46,25 @@ public class KbService {
         return kbMapper.selectById(id);
     }
 
+    public KnowledgeBase getByIdAndUser(Long id, Long userId) {
+        return kbMapper.selectOne(
+                lambdaQuery(KnowledgeBase.class)
+                        .eq(KnowledgeBase::getId, id)
+                        .eq(KnowledgeBase::getUserId, userId));
+    }
+
     @Transactional
-    public void delete(Long id) {
-        // 1. 删除该知识库下的所有文档（含文件、切片、向量库）
-        List<Document> docs = documentService.listByKb(id);
-        for (Document doc : docs) {
-            documentService.delete(doc.getId());
+    public void delete(Long id, Long userId) {
+        KnowledgeBase kb = getByIdAndUser(id, userId);
+        if (kb == null) {
+            throw new RuntimeException("无权删除此知识库");
         }
 
-        // 2. 删除该知识库下的所有对话及消息
+        List<Document> docs = documentService.listByKb(id);
+        for (Document doc : docs) {
+            documentService.delete(doc.getId(), userId);
+        }
+
         List<Conversation> conversations = conversationMapper.selectList(
                 lambdaQuery(Conversation.class).eq(Conversation::getKbId, id));
         for (Conversation conv : conversations) {
@@ -63,7 +73,6 @@ public class KbService {
             conversationMapper.deleteById(conv.getId());
         }
 
-        // 3. 删除知识库记录
         kbMapper.deleteById(id);
     }
 }

@@ -22,10 +22,7 @@ spring:
     multipart:
       max-file-size: 200MB
       max-request-size: 500MB
-  thymeleaf:
-    cache: false
-    prefix: classpath:/templates/
-    suffix: .html
+
 
 # MyBatis-Plus 配置
 mybatis-plus:

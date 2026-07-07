@@ -141,12 +141,27 @@ public class DocumentService {
                         .orderByDesc(Document::getCreatedAt));
     }
 
+    public List<Document> listByKbAndUser(Long kbId, Long userId) {
+        return documentMapper.selectList(
+                Wrappers.lambdaQuery(Document.class)
+                        .eq(Document::getKbId, kbId)
+                        .eq(Document::getUserId, userId)
+                        .orderByDesc(Document::getCreatedAt));
+    }
+
     public Document getById(Long id) {
         return documentMapper.selectById(id);
     }
 
-    public void delete(Long id) {
-        Document doc = documentMapper.selectById(id);
+    public Document getByIdAndUser(Long id, Long userId) {
+        return documentMapper.selectOne(
+                Wrappers.lambdaQuery(Document.class)
+                        .eq(Document::getId, id)
+                        .eq(Document::getUserId, userId));
+    }
+
+    public void delete(Long id, Long userId) {
+        Document doc = getByIdAndUser(id, userId);
         if (doc != null) {
             File file = new File(doc.getFilePath());
             if (file.exists()) file.delete();

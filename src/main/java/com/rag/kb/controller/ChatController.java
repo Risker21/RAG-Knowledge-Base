@@ -124,8 +124,14 @@ public class ChatController {
 
     @GetMapping("/api/messages/{convId}")
     @ResponseBody
-    public ApiResult<List<Message>> getMessages(@PathVariable Long convId) {
-        return ApiResult.success(chatService.getMessages(convId));
+    public ApiResult<List<Message>> getMessages(@PathVariable Long convId, HttpSession session) {
+        Long userId = (Long) session.getAttribute("userId");
+        if (userId == null) return ApiResult.error(401, "未登录");
+        try {
+            return ApiResult.success(chatService.getMessages(convId, userId));
+        } catch (RuntimeException e) {
+            return ApiResult.error(403, e.getMessage());
+        }
     }
 
     @PostMapping("/api/voice/transcribe")

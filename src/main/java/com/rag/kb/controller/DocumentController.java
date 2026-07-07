@@ -37,13 +37,21 @@ public class DocumentController {
     }
 
     @GetMapping("/api/list/{kbId}")
-    public ApiResult<List<Document>> list(@PathVariable Long kbId) {
-        return ApiResult.success(documentService.listByKb(kbId));
+    public ApiResult<List<Document>> list(@PathVariable Long kbId, HttpSession session) {
+        Long userId = (Long) session.getAttribute("userId");
+        if (userId == null) return ApiResult.error(401, "未登录");
+        return ApiResult.success(documentService.listByKbAndUser(kbId, userId));
     }
 
     @DeleteMapping("/api/{id}")
-    public ApiResult<Void> delete(@PathVariable Long id) {
-        documentService.delete(id);
-        return ApiResult.success(null);
+    public ApiResult<Void> delete(@PathVariable Long id, HttpSession session) {
+        Long userId = (Long) session.getAttribute("userId");
+        if (userId == null) return ApiResult.error(401, "未登录");
+        try {
+            documentService.delete(id, userId);
+            return ApiResult.success(null);
+        } catch (Exception e) {
+            return ApiResult.error(403, "无权删除此文档");
+        }
     }
 }

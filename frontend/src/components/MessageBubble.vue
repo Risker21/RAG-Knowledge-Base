@@ -9,6 +9,9 @@ const props = defineProps<{ content: string; role: number; thinking?: boolean }>
 marked.use(markedHighlight({
   langPrefix: 'hljs language-',
   highlight(code: string, lang: string) {
+    if (code.includes('hljs-')) {
+      return code
+    }
     if (lang && hljs.getLanguage(lang)) {
       return hljs.highlight(code, { language: lang }).value
     }
@@ -26,7 +29,13 @@ function decodeHtmlEntities(text: string): string {
 
 const html = computed(() => {
   try {
-    const decodedContent = decodeHtmlEntities(props.content || '')
+    const content = props.content || ''
+    if (content.includes('hljs-keyword') || content.includes('hljs-string') || content.includes('hljs-comment')) {
+      const decoded = decodeHtmlEntities(content)
+      const wrapped = decoded.replace(/<pre[^>]*>(.*?)<\/pre>/gis, '<pre><code>$1</code></pre>')
+      return wrapped
+    }
+    const decodedContent = decodeHtmlEntities(content)
     return marked(decodedContent)
   } catch {
     return props.content

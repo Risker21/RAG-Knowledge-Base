@@ -63,7 +63,22 @@ public class ChatService {
         conversationMapper.deleteById(conversationId);
     }
 
-    public List<Message> getMessages(Long conversationId) {
+    public Conversation getConversationById(Long conversationId) {
+        return conversationMapper.selectById(conversationId);
+    }
+
+    public Conversation getConversationByIdAndUser(Long conversationId, Long userId) {
+        return conversationMapper.selectOne(
+                lambdaQuery(Conversation.class)
+                        .eq(Conversation::getId, conversationId)
+                        .eq(Conversation::getUserId, userId));
+    }
+
+    public List<Message> getMessages(Long conversationId, Long userId) {
+        Conversation conv = getConversationByIdAndUser(conversationId, userId);
+        if (conv == null) {
+            throw new RuntimeException("无权访问此对话");
+        }
         return messageMapper.selectList(
                 lambdaQuery(Message.class)
                         .eq(Message::getConversationId, conversationId)
