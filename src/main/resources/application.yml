@@ -43,6 +43,11 @@ app:
     base-url: https://ark.cn-beijing.volces.com/api/v3
     embedding-model: doubao-embedding-vision-251215
     chat-model: doubao-seed-1-8-251228
+  embedding:
+    cache-ttl-hours: 24
+  sse:
+    timeout-ms: 300000
+    batch-size: 50
   stt:
     provider: volcengine
     base-url: https://api.openai.com

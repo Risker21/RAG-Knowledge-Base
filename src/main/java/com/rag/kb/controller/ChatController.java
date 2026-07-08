@@ -101,6 +101,10 @@ public class ChatController {
         }
     }
 
+    private void flushSseBuffer(String convKey) {
+        sseService.flush(convKey);
+    }
+
     @GetMapping("/api/conversations/{kbId}")
     @ResponseBody
     public ApiResult<List<Conversation>> getConversations(@PathVariable Long kbId, HttpSession session) {

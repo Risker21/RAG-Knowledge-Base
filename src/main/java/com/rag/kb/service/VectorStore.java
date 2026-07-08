@@ -7,7 +7,6 @@ import org.springframework.stereotype.Service;
 
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.stream.Collectors;
 
 @Slf4j
 @Service
@@ -15,6 +14,8 @@ public class VectorStore {
 
     /** kbId -> (chunkId -> vector) */
     private final Map<Long, Map<Long, float[]>> kbVectors = new ConcurrentHashMap<>();
+    /** chunkId -> 预计算的向量范数 */
+    private final Map<Long, Double> vectorNorms = new ConcurrentHashMap<>();
     private final Map<Long, String> chunkTexts = new ConcurrentHashMap<>();
     private final Map<Long, String> chunkMeta = new ConcurrentHashMap<>();
     /** chunkId -> docId，用于文档级删除 */
@@ -23,6 +24,7 @@ public class VectorStore {
 
     public void store(Long chunkId, float[] vector, String text, Long docId, int chunkIndex, String filename, Long kbId) {
         kbVectors.computeIfAbsent(kbId, k -> new ConcurrentHashMap<>()).put(chunkId, vector);
+        vectorNorms.put(chunkId, computeNorm(vector));
         chunkTexts.put(chunkId, text);
         chunkMeta.put(chunkId, filename + ":" + chunkIndex);
         chunkDocMap.put(chunkId, docId);
@@ -35,6 +37,7 @@ public class VectorStore {
                 float[] vec = objectMapper.readValue(chunk.getEmbedding(), float[].class);
                 Long kbId = chunk.getKbId();
                 kbVectors.computeIfAbsent(kbId, k -> new ConcurrentHashMap<>()).put(chunk.getId(), vec);
+                vectorNorms.put(chunk.getId(), computeNorm(vec));
                 chunkTexts.put(chunk.getId(), chunk.getContent());
                 chunkMeta.put(chunk.getId(), chunk.getDocId() + ":" + chunk.getChunkIndex());
                 chunkDocMap.put(chunk.getId(), chunk.getDocId());
@@ -51,17 +54,45 @@ public class VectorStore {
         if (vectors == null || vectors.isEmpty()) {
             return Collections.emptyList();
         }
-        return vectors.entrySet().stream()
-                .map(e -> new SearchResult(e.getKey(), cosineSimilarity(queryVec, e.getValue()),
-                        chunkTexts.get(e.getKey()), chunkMeta.get(e.getKey())))
-                .filter(r -> r.score >= threshold)
-                .sorted((a, b) -> Double.compare(b.score, a.score))
-                .limit(topK)
-                .collect(Collectors.toList());
+
+        double queryNorm = computeNorm(queryVec);
+        if (queryNorm == 0) {
+            return Collections.emptyList();
+        }
+
+        PriorityQueue<SearchResult> minHeap = new PriorityQueue<>(topK,
+                Comparator.comparingDouble(SearchResult::getScore));
+
+        for (Map.Entry<Long, float[]> entry : vectors.entrySet()) {
+            Long chunkId = entry.getKey();
+            float[] vec = entry.getValue();
+            Double vecNorm = vectorNorms.get(chunkId);
+
+            if (vecNorm == null || vecNorm == 0) {
+                continue;
+            }
+
+            double score = dotProduct(queryVec, vec) / (queryNorm * vecNorm);
+
+            if (score >= threshold) {
+                SearchResult result = new SearchResult(chunkId, score,
+                        chunkTexts.get(chunkId), chunkMeta.get(chunkId));
+
+                if (minHeap.size() < topK) {
+                    minHeap.offer(result);
+                } else if (score > minHeap.peek().getScore()) {
+                    minHeap.poll();
+                    minHeap.offer(result);
+                }
+            }
+        }
+
+        List<SearchResult> results = new ArrayList<>(minHeap);
+        results.sort((a, b) -> Double.compare(b.getScore(), a.getScore()));
+        return results;
     }
 
     public void removeByDocId(Long docId) {
-        // 通过 chunkDocMap 找到所有属于该文档的 chunkId
         List<Long> toRemove = chunkDocMap.entrySet().stream()
                 .filter(e -> e.getValue().equals(docId))
                 .map(Map.Entry::getKey)
@@ -71,6 +102,7 @@ public class VectorStore {
             chunkTexts.remove(chunkId);
             chunkMeta.remove(chunkId);
             chunkDocMap.remove(chunkId);
+            vectorNorms.remove(chunkId);
             for (Map<Long, float[]> kbMap : kbVectors.values()) {
                 kbMap.remove(chunkId);
             }
@@ -83,14 +115,20 @@ public class VectorStore {
         return chunkTexts.size();
     }
 
-    private double cosineSimilarity(float[] a, float[] b) {
-        double dot = 0, normA = 0, normB = 0;
+    private double computeNorm(float[] vec) {
+        double sum = 0;
+        for (float v : vec) {
+            sum += (double) v * v;
+        }
+        return Math.sqrt(sum);
+    }
+
+    private double dotProduct(float[] a, float[] b) {
+        double dot = 0;
         for (int i = 0; i < a.length; i++) {
             dot += (double) a[i] * b[i];
-            normA += (double) a[i] * a[i];
-            normB += (double) b[i] * b[i];
         }
-        return dot / (Math.sqrt(normA) * Math.sqrt(normB));
+        return dot;
     }
 
     public static class SearchResult {
