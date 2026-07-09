@@ -11,6 +11,7 @@ import com.rag.kb.model.entity.KnowledgeBase;
 import com.rag.kb.model.entity.Message;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Isolation;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
@@ -53,7 +54,7 @@ public class KbService {
                         .eq(KnowledgeBase::getUserId, userId));
     }
 
-    @Transactional
+    @Transactional(isolation = Isolation.READ_COMMITTED)
     public void delete(Long id, Long userId) {
         KnowledgeBase kb = getByIdAndUser(id, userId);
         if (kb == null) {

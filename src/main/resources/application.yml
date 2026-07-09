@@ -8,11 +8,13 @@ spring:
   config:
     import: optional:classpath:application-secrets.yml
   datasource:
-    url: jdbc:mysql://localhost:3306/rag_kb?serverTimezone=Asia/Shanghai&rewriteBatchedStatements=true&useServerPrepStmts=true
+    url: jdbc:mysql://localhost:3306/rag_kb?serverTimezone=Asia/Shanghai&rewriteBatchedStatements=true&useServerPrepStmts=true&transactionIsolation=READ_COMMITTED
     username: root
     driver-class-name: com.mysql.cj.jdbc.Driver
   session:
     store-type: redis
+  transaction:
+    default-timeout: 60s
   data:
     redis:
       host: localhost

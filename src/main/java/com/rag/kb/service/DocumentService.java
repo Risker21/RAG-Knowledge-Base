@@ -11,6 +11,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Isolation;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -81,7 +82,7 @@ public class DocumentService {
         return doc;
     }
 
-    @Transactional
+    @Transactional(isolation = Isolation.READ_COMMITTED)
     protected void processDocument(Document doc) throws Exception {
         doc.setStatus(1); // 处理中
         documentMapper.updateById(doc);
@@ -109,7 +110,8 @@ public class DocumentService {
         List<DocChunk> entities = new ArrayList<>();
         for (int i = 0; i < chunks.size(); i++) {
             float[] embedding = embeddings.get(i);
-            if (embedding == null) continue; // 跳过失败的 embedding
+            if (embedding == null)
+                continue; // 跳过失败的 embedding
 
             Chunk chunk = chunks.get(i);
             DocChunk entity = new DocChunk();
@@ -164,7 +166,8 @@ public class DocumentService {
         Document doc = getByIdAndUser(id, userId);
         if (doc != null) {
             File file = new File(doc.getFilePath());
-            if (file.exists()) file.delete();
+            if (file.exists())
+                file.delete();
             docChunkMapper.delete(
                     Wrappers.lambdaQuery(DocChunk.class)
                             .eq(DocChunk::getDocId, id));

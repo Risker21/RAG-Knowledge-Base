@@ -268,6 +268,7 @@ rag-kb/
 | **Embedding 缓存** | Redis 缓存已计算的嵌入向量，SHA-256 哈希作为缓存键 | 重复文本直接返回缓存，减少 80-90% 的 API 调用 |
 | **批量 Embedding** | `EmbeddingService.embedBatch()` | 减少 API 调用次数，提升文档处理吞吐量 |
 | **SSE 批量发送** | `SseService` 缓冲累计到阈值后批量发送 | 减少序列化和网络调用次数，提升 60-70% 发送效率 |
+| **事务隔离级别优化** | 默认隔离级别从 REPEATABLE_READ 调整为 READ_COMMITTED | 减少 MVCC 版本开销，提升并发读写性能，减少锁冲突 |
 | **SSE 流式输出** | `SseEmitter` + `CompletableFuture` | 首 token 延迟降低至 1-3s，用户感知体验大幅提升 |
 | **指数退避重试** | 1s → 2s → 4s 间隔，最多 3 次 | 网络抖动时自动恢复，成功率提升至 99%+ |
 | **Nginx 代理优化** | `proxy_buffering off; proxy_cache off;` | 确保 SSE 数据流不被缓存，实时推送 |
