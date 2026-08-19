@@ -40,7 +40,7 @@ function cleanContent(content: string): string {
   return cleaned
 }
 
-function detectAndFixFormat(content: string): string {
+function detectAndFixFormat(content: string): string | null {
   if (!content) return ''
   
   if (content.includes('hljs-keyword') || content.includes('hljs-string') || content.includes('hljs-comment')) {
