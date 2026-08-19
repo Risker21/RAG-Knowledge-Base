@@ -8,7 +8,7 @@ const props = defineProps<{ content: string; role: number; thinking?: boolean }>
 
 marked.use(markedHighlight({
   langPrefix: 'hljs language-',
-  highlight(code: string, lang: string) {
+  highlight(code: string, lang: string | undefined, _info: string) {
     if (code.includes('hljs-')) {
       return code
     }

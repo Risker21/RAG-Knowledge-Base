@@ -51,8 +51,8 @@ function toggleRefs(e: Event) {
 }
 
 function extractFilename(snippet?: string): string | null {
-  const m = snippet && snippet.match(/【(.+?)】/)
-  return m ? m[1] : null
+  const m = snippet?.match(/【(.+?)】/)
+  return m?.[1] ?? null
 }
 
 onMounted(async () => {
