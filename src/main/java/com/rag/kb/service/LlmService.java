@@ -14,6 +14,7 @@ import org.springframework.web.client.RestTemplate;
 
 import java.io.*;
 import java.net.HttpURLConnection;
+
 import java.net.SocketTimeoutException;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
@@ -88,7 +89,7 @@ public class LlmService {
                 }
                 return handleError("AI 服务暂时不可用，请稍后重试");
 
-            } catch (ResourceAccessException | SocketTimeoutException e) {
+            } catch (ResourceAccessException e) {
                 log.warn("LLM API 网络超时 (第{}次尝试): {}", attempt, e.getMessage());
                 if (attempt < maxRetries) {
                     waitBeforeRetry(attempt);
@@ -220,7 +221,7 @@ public class LlmService {
                 onToken.accept(error);
                 return error;
 
-            } catch (ResourceAccessException | SocketTimeoutException e) {
+            } catch (ResourceAccessException e) {
                 log.warn("流式 LLM API 网络错误 (第{}次尝试): {}", attempt, e.getMessage());
                 if (attempt < maxRetries) {
                     waitBeforeRetry(attempt);
