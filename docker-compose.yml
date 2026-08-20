@@ -41,6 +41,7 @@ services:
       APP_STT_ACCESS_TOKEN: ${STT_ACCESS_TOKEN}
     volumes:
       - uploads-data:/root/Desktop/Project/rag-kb/uploads
+      - maven-repo:/root/.m2/repository  # 持久化 Maven 依赖缓存
     depends_on:
       mysql:
         condition: service_healthy
@@ -58,3 +59,4 @@ services:
 volumes:
   mysql-data:
   uploads-data:
+  maven-repo:  # 新增：Maven 依赖缓存卷
