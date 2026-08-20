@@ -24,12 +24,16 @@ public class KbController {
     }
 
     @PostMapping("/api/create")
-    public ApiResult<KnowledgeBase> create(@RequestParam String name,
-                                           @RequestParam(required = false) String description,
+    public ApiResult<KnowledgeBase> create(@RequestBody java.util.Map<String, String> body,
                                            HttpSession session) {
         Long userId = (Long) session.getAttribute("userId");
         if (userId == null) return ApiResult.error(401, "未登录");
         try {
+            String name = body.get("name");
+            String description = body.get("description");
+            if (name == null || name.trim().isEmpty()) {
+                return ApiResult.error(400, "知识库名称不能为空");
+            }
             KnowledgeBase kb = kbService.create(userId, name, description);
             return ApiResult.success(kb);
         } catch (Exception e) {
