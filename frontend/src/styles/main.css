@@ -321,3 +321,17 @@ textarea.form-input { resize: vertical; min-height: 80px; }
 ::-webkit-scrollbar { width: 6px; }
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: #ccc; border-radius: 3px; }
+
+/* 全局移动端适配 */
+html, body {
+  overflow-x: hidden;
+  -webkit-tap-highlight-color: transparent;
+}
+
+@media (max-width: 768px) {
+  body { font-size: 15px; }
+  .btn { min-height: 40px; padding: 10px 18px; }
+  .form-input { font-size: 16px; } /* 防止 iOS 缩放 */
+  ::-webkit-scrollbar { width: 4px; height: 4px; }
+  ::-webkit-scrollbar-thumb { background: #d5cfc4; }
+}

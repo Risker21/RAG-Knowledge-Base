@@ -19,6 +19,14 @@ const refModalVisible = ref(false)
 const refDetail = ref<{ title: string; score: number; snippet: string } | null>(null)
 const localMessages = ref<any[]>(store.messages)
 const streamKey = ref(0)
+const sidebarOpen = ref(false)
+
+function toggleSidebar() {
+  sidebarOpen.value = !sidebarOpen.value
+}
+function closeSidebar() {
+  sidebarOpen.value = false
+}
 
 function updateMessages(arr: any[]) {
   localMessages.value = arr
@@ -190,9 +198,21 @@ async function handleAsk() {
 <template>
   <div v-for="i in 10" :key="i" class="ink-particle"></div>
 
-  <div class="chat-layout">
+  <div class="chat-layout" :class="{ 'sidebar-open': sidebarOpen }">
+    <!-- 移动端顶栏 -->
+    <div class="mobile-topbar">
+      <button class="mobile-menu-btn" @click="toggleSidebar" aria-label="菜单">
+        <span></span><span></span><span></span>
+      </button>
+      <span class="mobile-title">墨 韵</span>
+      <span class="mobile-spacer"></span>
+    </div>
+
+    <!-- 侧边栏遮罩（移动端） -->
+    <div v-if="sidebarOpen" class="sidebar-mask" @click="closeSidebar"></div>
+
     <!-- 侧边栏 -->
-    <aside class="chat-sidebar">
+    <aside class="chat-sidebar" :class="{ 'sidebar-open': sidebarOpen }">
       <div class="sidebar-header">
         <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
           <span class="seal">墨</span>
@@ -228,8 +248,10 @@ async function handleAsk() {
 
     <!-- 主聊天区 -->
     <main class="chat-main">
-      <div v-if="activeConv" class="chat-titlebar">
-        <span class="conv-title-text">{{ activeConv.title || '对话' }}</span>
+      <div class="chat-titlebar-row">
+        <div v-if="activeConv" class="chat-titlebar">
+          <span class="conv-title-text">{{ activeConv.title || '对话' }}</span>
+        </div>
       </div>
 
       <div class="messages" id="messages">
@@ -308,6 +330,55 @@ async function handleAsk() {
   position: relative;
 }
 
+/* 移动端顶栏 */
+.mobile-topbar {
+  display: none;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 14px;
+  background: rgba(255,252,247,0.92);
+  border-bottom: 1px solid var(--border-lt);
+  flex-shrink: 0;
+}
+.mobile-menu-btn {
+  width: 36px;
+  height: 36px;
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  gap: 4px;
+  padding: 0;
+}
+.mobile-menu-btn span {
+  display: block;
+  width: 18px;
+  height: 2px;
+  background: var(--ink);
+  border-radius: 2px;
+}
+.mobile-title {
+  font-family: var(--serif);
+  font-size: 16px;
+  letter-spacing: 2px;
+  font-weight: 700;
+  color: var(--ink);
+}
+.mobile-spacer { width: 36px; }
+
+.sidebar-mask {
+  display: none;
+  position: absolute;
+  inset: 0;
+  background: rgba(28,26,24,0.4);
+  z-index: 5;
+  backdrop-filter: blur(2px);
+}
+
 /* 侧边栏 */
 .chat-sidebar {
   width: 280px;
@@ -318,6 +389,8 @@ async function handleAsk() {
   display: flex;
   flex-direction: column;
   flex-shrink: 0;
+  transition: transform 0.28s ease;
+  z-index: 20;
 }
 .sidebar-header {
   padding: 16px;
@@ -386,6 +459,7 @@ async function handleAsk() {
   min-width: 0;
   position: relative;
 }
+.chat-titlebar-row { display: flex; flex-shrink: 0; }
 .chat-titlebar {
   display: flex; align-items: center;
   padding: 12px 32px;
@@ -556,8 +630,8 @@ async function handleAsk() {
 }
 .input-area .input-row {
   display: flex; align-items: stretch; gap: 0;
-  max-width: min(65vw, 720px);
   width: 100%;
+  max-width: 760px;
 }
 .input-area textarea {
   flex: 1; padding: 12px 16px;
@@ -594,6 +668,48 @@ async function handleAsk() {
 }
 .btn-send:hover { background: var(--ink-light); }
 .btn-send:disabled { opacity: 0.35; cursor: not-allowed; }
+
+/* 响应式 - 移动端 */
+@media (max-width: 768px) {
+  .chat-layout {
+    flex-direction: column;
+    height: calc(100vh - 60px);
+  }
+  .mobile-topbar { display: flex; }
+  .sidebar-mask { display: block; }
+  .chat-sidebar {
+    position: absolute;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    width: 82%;
+    max-width: 300px;
+    transform: translateX(-100%);
+    box-shadow: var(--shadow-lg);
+    z-index: 10;
+  }
+  .chat-sidebar.sidebar-open {
+    transform: translateX(0);
+  }
+  .chat-titlebar { padding: 10px 14px; }
+  .conv-title-text { font-size: 13px; }
+  .messages { padding: 14px; gap: 0; }
+  .msg-pair + .msg-pair { margin-top: 14px; padding-top: 14px; }
+  .input-area { padding: 10px 12px 14px; }
+  .input-area textarea { padding: 10px 12px; min-height: 44px; font-size: 14px; }
+  .btn-send { height: 44px; padding: 0 14px; font-size: 13px; }
+  .msg { max-width: 100%; }
+  .msg-content { max-width: none !important; flex: 1; }
+  .welcome { padding: 40px 16px; }
+  .welcome h2 { font-size: 20px; letter-spacing: 1px; }
+}
+
+/* 小屏优化 */
+@media (max-width: 420px) {
+  .chat-sidebar { max-width: 88%; }
+  .input-area .input-row { gap: 6px; }
+  .btn-send { padding: 0 12px; letter-spacing: 0; }
+}
 
 /* 引用弹窗 */
 .ref-content { font-size: 14px; }

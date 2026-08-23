@@ -46,6 +46,7 @@ const handleLogout = async () => {
   display: flex;
   align-items: center;
   gap: 10px;
+  min-width: 0;
 }
 .app-header h1 {
   font-family: var(--serif);
@@ -53,6 +54,9 @@ const handleLogout = async () => {
   letter-spacing: 2px;
   color: var(--ink);
   font-weight: 700;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .header-right {
   display: flex;
@@ -60,6 +64,7 @@ const handleLogout = async () => {
   gap: 12px;
   font-size: 14px;
   color: var(--ink-muted);
+  flex-shrink: 0;
 }
 .btn-logout {
   color: var(--ink-muted);
@@ -68,4 +73,14 @@ const handleLogout = async () => {
   transition: color 0.15s;
 }
 .btn-logout:hover { color: var(--cinnabar); }
+
+/* 移动端响应式 */
+@media (max-width: 768px) {
+  .app-header { padding: 0 14px; height: 52px; }
+  .app-header h1 { font-size: 15px; letter-spacing: 1px; }
+  .app-header-left { gap: 6px; }
+  .header-right { gap: 8px; font-size: 13px; }
+  .header-right span:not(.seal) { max-width: 70px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .btn-logout { font-size: 12px; }
+}
 </style>

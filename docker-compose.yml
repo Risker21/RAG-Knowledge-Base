@@ -41,20 +41,27 @@ services:
       APP_STT_ACCESS_TOKEN: ${STT_ACCESS_TOKEN}
     volumes:
       - uploads-data:/root/Desktop/Project/rag-kb/uploads
-      - maven-repo:/root/.m2/repository  # 持久化 Maven 依赖缓存
+      - maven-repo:/root/.m2/repository
     depends_on:
       mysql:
         condition: service_healthy
       redis:
         condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/actuator/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 40s
     restart: unless-stopped
 
   frontend:
     build: frontend
     ports:
-      - "80:80"
+      - "8081:80"
     depends_on:
-      - backend
+      backend:
+        condition: service_healthy
 
 volumes:
   mysql-data:

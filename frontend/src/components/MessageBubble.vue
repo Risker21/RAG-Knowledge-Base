@@ -116,7 +116,7 @@ const AI_ICON = '<svg viewBox="0 0 24 24" width="16" height="16" fill="currentCo
 </template>
 
 <style scoped>
-.msg { display: flex; gap: 12px; max-width: 840px; }
+.msg { display: flex; gap: 12px; max-width: 100%; width: 100%; }
 .msg-user { margin-left: auto; flex-direction: row-reverse; }
 .msg-ai { margin-right: auto; }
 
@@ -137,8 +137,8 @@ const AI_ICON = '<svg viewBox="0 0 24 24" width="16" height="16" fill="currentCo
   box-shadow: 0 2px 6px var(--cinnabar-mid);
 }
 
-.msg-content { max-width: 640px; }
-.msg-user .msg-content { max-width: 660px; }
+.msg-content { max-width: 100%; flex: 1; min-width: 0; }
+.msg-user .msg-content { max-width: 100%; }
 
 .msg-text {
   padding: 14px 18px;
@@ -244,5 +244,20 @@ const AI_ICON = '<svg viewBox="0 0 24 24" width="16" height="16" fill="currentCo
   padding: 8px;
   background: var(--cinnabar-dim);
   border-radius: var(--radius);
+}
+
+/* 移动端响应式 */
+@media (max-width: 768px) {
+  .msg { gap: 8px; }
+  .msg-avatar { width: 30px; height: 30px; }
+  .msg-text { padding: 10px 14px; font-size: 14px; line-height: 1.65; }
+  .btn-copy-answer { top: 4px; right: 4px; width: 24px; height: 24px; font-size: 12px; }
+  :deep(pre) { padding: 12px; font-size: 12px; overflow-x: auto; }
+  :deep(code) { font-size: 12px; }
+  :deep(.msg-text-body h1), :deep(.msg-text-body h2), :deep(.msg-text-body h3) {
+    font-size: 16px;
+  }
+  .msg-text-body.collapsed { max-height: 240px; }
+  .msg-text-body.collapsed::after { height: 36px; }
 }
 </style>

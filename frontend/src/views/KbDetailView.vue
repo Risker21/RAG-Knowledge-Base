@@ -200,4 +200,21 @@ onMounted(() => { fetchKb(); fetchDocs() })
 .doc-info { display: flex; align-items: center; gap: 12px; min-width: 0; flex: 1; }
 .doc-name { font-size: 14px; font-weight: 600; color: var(--ink); }
 .doc-chunks { font-size: 12px; color: var(--ink-pale); flex-shrink: 0; }
+
+/* 移动端响应式 */
+@media (max-width: 768px) {
+  .main-content { padding: 16px; }
+  .page-header { margin-bottom: 16px; gap: 10px; }
+  .page-header h2 { font-size: 18px; letter-spacing: 0.5px; }
+  .upload-area { padding: 32px 16px; margin-bottom: 16px; }
+  .upload-area p { font-size: 13px; }
+  .doc-item {
+    flex-wrap: wrap;
+    gap: 10px;
+    padding: 12px 14px;
+  }
+  .doc-info { width: 100%; }
+  .doc-name { font-size: 13px; word-break: break-all; }
+  .page-header .btn { padding: 8px 14px; font-size: 13px; }
+}
 </style>
