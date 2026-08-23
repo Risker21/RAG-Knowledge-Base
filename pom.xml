@@ -74,6 +74,12 @@
             <artifactId>jackson-databind</artifactId>
         </dependency>
 
+        <!-- Actuator 健康检查 -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-actuator</artifactId>
+        </dependency>
+
         <!-- HttpClient -->
         <dependency>
             <groupId>org.apache.httpcomponents.client5</groupId>
