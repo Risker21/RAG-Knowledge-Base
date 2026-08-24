@@ -39,8 +39,9 @@ services:
       APP_OPENAI_API_KEY: ${ARK_API_KEY}
       APP_STT_APP_ID: ${STT_APP_ID}
       APP_STT_ACCESS_TOKEN: ${STT_ACCESS_TOKEN}
+      APP_UPLOAD_DIR: /app/uploads
     volumes:
-      - uploads-data:/root/Desktop/Project/rag-kb/uploads
+      - ./uploads:/app/uploads
       - maven-repo:/root/.m2/repository
     depends_on:
       mysql:
@@ -65,5 +66,4 @@ services:
 
 volumes:
   mysql-data:
-  uploads-data:
   maven-repo:  # 新增：Maven 依赖缓存卷

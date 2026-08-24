@@ -5,6 +5,10 @@ import com.rag.kb.model.entity.Document;
 import com.rag.kb.service.DocumentService;
 import jakarta.servlet.http.HttpSession;
 import lombok.RequiredArgsConstructor;
+import org.springframework.core.io.Resource;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -41,6 +45,31 @@ public class DocumentController {
         Long userId = (Long) session.getAttribute("userId");
         if (userId == null) return ApiResult.error(401, "未登录");
         return ApiResult.success(documentService.listByKbAndUser(kbId, userId));
+    }
+
+    @GetMapping("/api/preview/{id}")
+    public ResponseEntity<Resource> preview(@PathVariable Long id, HttpSession session) {
+        Long userId = (Long) session.getAttribute("userId");
+        if (userId == null) return ResponseEntity.status(401).build();
+
+        Document doc = documentService.getByIdAndUser(id, userId);
+        if (doc == null) return ResponseEntity.notFound().build();
+
+        Resource resource = documentService.getResource(id, userId);
+        if (resource == null) return ResponseEntity.notFound().build();
+
+        String contentType = "application/octet-stream";
+        String fileType = doc.getFileType().toLowerCase();
+        if ("pdf".equals(fileType)) {
+            contentType = "application/pdf";
+        } else if (List.of("jpg", "jpeg", "png", "gif", "webp").contains(fileType)) {
+            contentType = "image/" + (fileType.equals("jpg") ? "jpeg" : fileType);
+        }
+
+        return ResponseEntity.ok()
+                .contentType(MediaType.parseMediaType(contentType))
+                .header(HttpHeaders.CONTENT_DISPOSITION, "inline; filename=\"" + doc.getOriginalName() + "\"")
+                .body(resource);
     }
 
     @DeleteMapping("/api/{id}")

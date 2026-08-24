@@ -10,6 +10,8 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
+import org.springframework.core.io.FileSystemResource;
+import org.springframework.core.io.Resource;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Isolation;
 import org.springframework.transaction.annotation.Transactional;
@@ -160,6 +162,14 @@ public class DocumentService {
                 Wrappers.lambdaQuery(Document.class)
                         .eq(Document::getId, id)
                         .eq(Document::getUserId, userId));
+    }
+
+    public Resource getResource(Long id, Long userId) {
+        Document doc = getByIdAndUser(id, userId);
+        if (doc == null) return null;
+        File file = new File(doc.getFilePath());
+        if (!file.exists()) return null;
+        return new FileSystemResource(file);
     }
 
     public void delete(Long id, Long userId) {

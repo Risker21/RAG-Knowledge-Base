@@ -71,6 +71,10 @@ async function deleteDoc(id: number) {
   }
 }
 
+function previewDoc(id: number) {
+  window.open(`/doc/api/preview/${id}`, '_blank')
+}
+
 const statusLabel: Record<number, string> = { 0: '待处理', 1: '处理中', 2: '已完成', 3: '失败' }
 const statusTag: Record<number, string> = { 0: 'tag-pending', 1: 'tag-processing', 2: 'tag-done', 3: 'tag-failed' }
 
@@ -120,7 +124,10 @@ onMounted(() => { fetchKb(); fetchDocs() })
             <span v-if="doc.chunkCount" class="doc-chunks">{{ doc.chunkCount }} 段</span>
           </div>
           <span :class="['tag', statusTag[doc.status] || 'tag-pending']">{{ statusLabel[doc.status] || doc.status }}</span>
-          <button class="btn btn-sm btn-danger" @click="deleteDoc(doc.id)">删除</button>
+          <div style="display:flex;gap:8px">
+            <button class="btn btn-sm btn-ghost" @click="previewDoc(doc.id)">预览</button>
+            <button class="btn btn-sm btn-danger" @click="deleteDoc(doc.id)">删除</button>
+          </div>
         </div>
       </div>
     </main>
