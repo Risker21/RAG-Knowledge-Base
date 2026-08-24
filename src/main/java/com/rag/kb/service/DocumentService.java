@@ -1,5 +1,5 @@
 package com.rag.kb.service;
-
+import org.springframework.scheduling.annotation.Async; // 新增导入
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.rag.kb.mapper.DocChunkMapper;
 import com.rag.kb.mapper.DocumentMapper;
