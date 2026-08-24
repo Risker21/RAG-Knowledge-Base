@@ -84,6 +84,10 @@ public class DocumentService {
         return doc;
     }
 
+
+
+
+    @Async // 将解析过程变为异步执行，不阻塞上传请求
     @Transactional(isolation = Isolation.READ_COMMITTED)
     protected void processDocument(Document doc) throws Exception {
         doc.setStatus(1); // 处理中
