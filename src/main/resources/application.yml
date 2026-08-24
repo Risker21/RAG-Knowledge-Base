@@ -31,8 +31,8 @@ spring:
       timeout: 6000
   servlet:
     multipart:
-      max-file-size: 200MB
-      max-request-size: 500MB
+      max-file-size: 50MB
+      max-request-size: 60MB
 
 
 # MyBatis-Plus 配置
