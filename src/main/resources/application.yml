@@ -52,8 +52,8 @@ app:
   upload-dir: ${user.home}/Desktop/Project/rag-kb/uploads
   openai:
     base-url: https://ark.cn-beijing.volces.com/api/v3
-    embedding-model: doubao-embedding-large
-    chat-model: doubao-seed-1-8-251228
+    embedding-model: doubao-embedding-large-text-250515
+    chat-model: doubao-seed-2-1-pro-260628
   embedding:
     cache-ttl-hours: 24
   sse:
