@@ -13,7 +13,11 @@ import org.springframework.web.client.RestTemplate;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.util.*;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
+import java.util.stream.Collectors;
 
 @Slf4j
 @Service
@@ -37,6 +41,13 @@ public class EmbeddingService {
     private int cacheTtlHours;
 
     private static final String CACHE_PREFIX = "embedding:";
+
+    // 并发调用 embedding 的线程池；daemon 线程避免阻塞 JVM 正常退出
+    private static final ExecutorService EMBEDDING_EXECUTOR = Executors.newFixedThreadPool(8, r -> {
+        Thread t = new Thread(r, "embedding-worker");
+        t.setDaemon(true);
+        return t;
+    });
 
     public float[] embed(String text) {
         List<float[]> results = embedBatch(List.of(text));
@@ -105,10 +116,17 @@ public class EmbeddingService {
     private List<float[]> callEmbeddingApi(List<String> texts) {
         // 当前账号内纯文本向量模型（-text- 系列）均已 Retiring，仅多模态 vision 向量模型可用。
         // /embeddings/multimodal 的 input 是“单个文档”的若干部分，一次调用只返回一个向量，
-        // 不支持多条独立文本批量，因此这里对每条文本逐条调用。
-        List<float[]> results = new ArrayList<>();
-        for (String text : texts) {
-            results.add(embedOne(text));
+        // 不支持多条独立文本批量，因此并发调用，避免逐条串行过慢。
+        List<CompletableFuture<float[]>> futures = texts.stream()
+                .map(text -> CompletableFuture.supplyAsync(() -> embedOne(text), EMBEDDING_EXECUTOR))
+                .collect(Collectors.toList());
+        List<float[]> results = new ArrayList<>(texts.size());
+        for (CompletableFuture<float[]> future : futures) {
+            try {
+                results.add(future.join());
+            } catch (Exception e) {
+                results.add(null);
+            }
         }
         return results;
     }
