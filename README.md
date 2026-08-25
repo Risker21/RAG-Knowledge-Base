@@ -161,7 +161,7 @@ npm run dev
 | 火山引擎 API Key | `application-secrets.yml` / `.env` | - | AI 调用凭证 |
 | 火山引擎 App ID | `application-secrets.yml` / `.env` | - | STT 语音识别 |
 | 上传目录 | `application.yml` | `./uploads` | 文档存储位置 |
-| 嵌入模型 | `app.openai.embedding-model` | `doubao-embedding-large-text-250515` | 文本向量化模型 |
+| 嵌入模型 | `app.openai.embedding-model` | `doubao-embedding-vision-251215` | 多模态向量模型（账号内文本向量模型已退役） |
 | 对话模型 | `app.openai.chat-model` | `doubao-seed-2-1-pro-260628` | 大语言模型 |
 | 温度参数 | `app.openai.temperature` | `0.1` | 降低生成随机性，减少幻觉 |
 | 最大重试次数 | `app.openai.max-retries` | `3` | API 调用失败重试次数 |
@@ -247,7 +247,7 @@ rag-kb/
 | 指标 | 数值 | 说明 |
 |------|------|------|
 | **知识库规模** | 单知识库支持 **10,000+ 文档** | 基于内存向量库，受 JVM 堆内存限制；每文档平均切分为 ~10 个 chunk，单 KB 可容纳 **100,000+ 向量** |
-| **向量维度** | 2560（取决于模型） | 使用 `doubao-embedding-large-text-250515` 文本向量模型，维度以实际返回为准 |
+| **向量维度** | 2048（取决于模型） | 使用 `doubao-embedding-vision-251215` 多模态向量模型（走 `/embeddings/multimodal`），维度以实际返回为准 |
 | **单向量内存** | ~4KB / ~6KB（1024/1536 维度） | 2GB 堆内存约可存储 500,000 个 1024 维向量 |
 | **向量检索耗时** | **< 50ms**（100,000 向量） | 内存全量余弦相似度计算，O(n) 复杂度，实际测试 100K 向量检索耗时 20-40ms |
 | **Embedding 调用耗时** | **500ms - 1.5s** | 火山引擎 embedding API 响应时间（网络 P95） |

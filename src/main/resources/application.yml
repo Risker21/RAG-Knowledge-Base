@@ -52,7 +52,7 @@ app:
   upload-dir: ${user.home}/Desktop/Project/rag-kb/uploads
   openai:
     base-url: https://ark.cn-beijing.volces.com/api/v3
-    embedding-model: doubao-embedding-large-text-250515
+    embedding-model: doubao-embedding-vision-251215  # 账号内文本向量模型均已退役，改用仍在服务的多模态 vision 向量模型（2048 维）
     chat-model: doubao-seed-2-1-pro-260628
   embedding:
     cache-ttl-hours: 24

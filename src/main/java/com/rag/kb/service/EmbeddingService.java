@@ -103,6 +103,17 @@ public class EmbeddingService {
     }
 
     private List<float[]> callEmbeddingApi(List<String> texts) {
+        // 当前账号内纯文本向量模型（-text- 系列）均已 Retiring，仅多模态 vision 向量模型可用。
+        // /embeddings/multimodal 的 input 是“单个文档”的若干部分，一次调用只返回一个向量，
+        // 不支持多条独立文本批量，因此这里对每条文本逐条调用。
+        List<float[]> results = new ArrayList<>();
+        for (String text : texts) {
+            results.add(embedOne(text));
+        }
+        return results;
+    }
+
+    private float[] embedOne(String text) {
         try {
             HttpHeaders headers = new HttpHeaders();
             headers.setContentType(MediaType.APPLICATION_JSON);
@@ -110,31 +121,26 @@ public class EmbeddingService {
 
             Map<String, Object> body = new HashMap<>();
             body.put("model", model);
-            // 文本向量化接口：input 为字符串数组，支持批量，每条独立返回一个向量
-            body.put("input", texts);
+            // 多模态向量化接口：input 为单个文档的若干部分（text / image_url），
+            // 纯文本切片时只放一个 text 部分。
+            List<Map<String, Object>> input = new ArrayList<>();
+            Map<String, Object> part = new HashMap<>();
+            part.put("type", "text");
+            part.put("text", text);
+            input.add(part);
+            body.put("input", input);
 
             HttpEntity<Map<String, Object>> request = new HttpEntity<>(body, headers);
-            String url = baseUrl + "/embeddings";
+            String url = baseUrl + "/embeddings/multimodal";
             ResponseEntity<String> response = restTemplate.postForEntity(url, request, String.class);
 
             JsonNode root = objectMapper.readTree(response.getBody());
             JsonNode dataNode = root.get("data");
-
-            List<float[]> results = new ArrayList<>();
-            if (dataNode.isArray()) {
-                for (JsonNode item : dataNode) {
-                    results.add(parseEmbedding(item.get("embedding")));
-                }
-            } else {
-                results.add(parseEmbedding(dataNode.get("embedding")));
-                while (results.size() < texts.size()) results.add(null);
-            }
-            return results;
+            // 多模态接口的 data 是单个对象：{ embedding: [...] }
+            return parseEmbedding(dataNode.get("embedding"));
         } catch (Exception e) {
-            log.warn("批量 Embedding API 调用失败: {}", e.getMessage());
-            List<float[]> nulls = new ArrayList<>();
-            for (int i = 0; i < texts.size(); i++) nulls.add(null);
-            return nulls;
+            log.warn("Embedding API 调用失败: {}", e.getMessage());
+            return null;
         }
     }
 
