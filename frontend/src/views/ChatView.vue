@@ -468,6 +468,7 @@ async function handleAsk() {
   flex-direction: column;
   background: var(--paper);
   min-width: 0;
+  min-height: 0; /* 移动端列向 flex 下允许收缩，否则子内容会把输入框挤出屏幕 */
   position: relative;
 }
 .chat-titlebar-row { display: flex; flex-shrink: 0; }
@@ -684,6 +685,7 @@ async function handleAsk() {
   .chat-layout {
     flex-direction: column;
     height: 100vh; /* 移动端占满全屏，内部滚动 */
+    height: 100dvh; /* 动态视口高度：避免手机浏览器地址栏遮挡底部输入框 */
   }
   .mobile-topbar { display: flex; }
   .sidebar-mask { display: block; }
