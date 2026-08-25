@@ -1,4 +1,5 @@
 package com.rag.kb.service;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.scheduling.annotation.Async; // 新增导入
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.rag.kb.mapper.DocChunkMapper;
@@ -38,6 +39,12 @@ public class DocumentService {
     private final EmbeddingService embeddingService;
     private final VectorStore vectorStore;
     private final ObjectMapper objectMapper;
+    private DocumentService self;
+
+    @org.springframework.beans.factory.annotation.Autowired
+    public void setSelf(@Lazy DocumentService self) {
+        this.self = self;
+    }
 
     @Value("${app.upload-dir}")
     private String uploadDir;
@@ -62,6 +69,7 @@ public class DocumentService {
 
         // 创建文档记录
         Document doc = new Document();
+        doc.setUuid(UUID.randomUUID().toString());
         doc.setKbId(kbId);
         doc.setUserId(userId);
         doc.setOriginalName(filename);
@@ -71,75 +79,80 @@ public class DocumentService {
         doc.setStatus(0); // 待处理
         documentMapper.insert(doc);
 
-        // 处理文档（异常捕获，不影响上传结果）
+        // 处理文档（异步调用）
+        // 这里直接调用带有 @Async 的方法，Spring 会自动异步执行
         try {
-            processDocument(doc);
+            self.processDocument(doc.getId());
         } catch (Exception e) {
-            log.warn("文档处理失败: {}. 文件已保存，稍后可重试。", e.getMessage());
-            doc.setStatus(3); // 失败
-            doc.setErrorMsg(e.getMessage());
-            documentMapper.updateById(doc);
+            log.warn("提交文档处理任务失败: {}", e.getMessage());
         }
 
         return doc;
     }
 
-
-
-
     @Async // 将解析过程变为异步执行，不阻塞上传请求
     @Transactional(isolation = Isolation.READ_COMMITTED)
-    protected void processDocument(Document doc) throws Exception {
-        doc.setStatus(1); // 处理中
-        documentMapper.updateById(doc);
+    public void processDocument(Long docId) {
+        Document doc = documentMapper.selectById(docId);
+        if (doc == null) return;
 
-        File file = new File(doc.getFilePath());
-        String text = documentParser.parse(file, doc.getFileType());
-
-        // 切片
-        List<Chunk> chunks = textChunker.split(text, doc.getOriginalName());
-        if (chunks.isEmpty()) {
-            doc.setStatus(2);
-            doc.setChunkCount(0);
+        try {
+            doc.setStatus(1); // 处理中
             documentMapper.updateById(doc);
-            return;
+
+            File file = new File(doc.getFilePath());
+            String text = documentParser.parse(file, doc.getFileType());
+
+            // 切片
+            List<Chunk> chunks = textChunker.split(text, doc.getOriginalName());
+            if (chunks.isEmpty()) {
+                doc.setStatus(2);
+                doc.setChunkCount(0);
+                documentMapper.updateById(doc);
+                return;
+            }
+
+            // 批量 Embedding（在文本前加上文档名，让向量包含文档身份信息）
+            String sourceTag = "【" + doc.getOriginalName() + "】";
+            List<String> texts = chunks.stream()
+                    .map(chunk -> sourceTag + "\n" + chunk.getContent())
+                    .toList();
+            List<float[]> embeddings = embeddingService.embedBatch(texts);
+
+            // 批量入库
+            List<DocChunk> entities = new ArrayList<>();
+            for (int i = 0; i < chunks.size(); i++) {
+                float[] embedding = embeddings.get(i);
+                if (embedding == null)
+                    continue; // 跳过失败 of embedding
+
+                Chunk chunk = chunks.get(i);
+                DocChunk entity = new DocChunk();
+                entity.setDocId(doc.getId());
+                entity.setKbId(doc.getKbId());
+                entity.setChunkIndex(chunk.getIndex());
+                entity.setContent(sourceTag + "\n" + chunk.getContent());
+                entity.setEmbedding(objectMapper.writeValueAsString(embedding));
+                docChunkMapper.insert(entity);
+                entities.add(entity);
+            }
+
+            // 加载到内存向量库（带 kbId 分区）
+            for (DocChunk e : entities) {
+                float[] emb = objectMapper.readValue(e.getEmbedding(), float[].class);
+                vectorStore.store(e.getId(), emb, e.getContent(),
+                        doc.getId(), e.getChunkIndex(), doc.getOriginalName(), doc.getKbId());
+            }
+
+            doc.setStatus(2); // 完成
+            doc.setChunkCount(entities.size());
+            documentMapper.updateById(doc);
+        } catch (Exception e) {
+            log.error("文档处理异常: {}", e.getMessage(), e);
+            doc.setStatus(3); // 失败
+            doc.setErrorMsg(e.getMessage());
+            documentMapper.updateById(doc);
         }
-
-        // 批量 Embedding（在文本前加上文档名，让向量包含文档身份信息）
-        String sourceTag = "【" + doc.getOriginalName() + "】";
-        List<String> texts = chunks.stream()
-                .map(chunk -> sourceTag + "\n" + chunk.getContent())
-                .toList();
-        List<float[]> embeddings = embeddingService.embedBatch(texts);
-
-        // 批量入库
-        List<DocChunk> entities = new ArrayList<>();
-        for (int i = 0; i < chunks.size(); i++) {
-            float[] embedding = embeddings.get(i);
-            if (embedding == null)
-                continue; // 跳过失败的 embedding
-
-            Chunk chunk = chunks.get(i);
-            DocChunk entity = new DocChunk();
-            entity.setDocId(doc.getId());
-            entity.setKbId(doc.getKbId());
-            entity.setChunkIndex(chunk.getIndex());
-            entity.setContent(sourceTag + "\n" + chunk.getContent());
-            entity.setEmbedding(objectMapper.writeValueAsString(embedding));
-            docChunkMapper.insert(entity);
-            entities.add(entity);
-        }
-
-        // 加载到内存向量库（带 kbId 分区）
-        for (DocChunk e : entities) {
-            float[] emb = objectMapper.readValue(e.getEmbedding(), float[].class);
-            vectorStore.store(e.getId(), emb, e.getContent(),
-                    doc.getId(), e.getChunkIndex(), doc.getOriginalName(), doc.getKbId());
-        }
-
-        doc.setStatus(2); // 完成
-        doc.setChunkCount(entities.size());
-        documentMapper.updateById(doc);
     }
 
     public List<Document> listByKb(Long kbId) {
@@ -165,6 +178,21 @@ public class DocumentService {
         return documentMapper.selectOne(
                 Wrappers.lambdaQuery(Document.class)
                         .eq(Document::getId, id)
+                        .eq(Document::getUserId, userId));
+    }
+
+    public Resource getResourceByUuid(String uuid, Long userId) {
+        Document doc = getByUuidAndUser(uuid, userId);
+        if (doc == null) return null;
+        File file = new File(doc.getFilePath());
+        if (!file.exists()) return null;
+        return new FileSystemResource(file);
+    }
+
+    public Document getByUuidAndUser(String uuid, Long userId) {
+        return documentMapper.selectOne(
+                Wrappers.lambdaQuery(Document.class)
+                        .eq(Document::getUuid, uuid)
                         .eq(Document::getUserId, userId));
     }
 

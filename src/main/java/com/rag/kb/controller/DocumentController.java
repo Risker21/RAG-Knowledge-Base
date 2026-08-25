@@ -47,15 +47,15 @@ public class DocumentController {
         return ApiResult.success(documentService.listByKbAndUser(kbId, userId));
     }
 
-    @GetMapping("/api/preview/{id}")
-    public ResponseEntity<Resource> preview(@PathVariable Long id, HttpSession session) {
+    @GetMapping("/api/preview/{uuid}")
+    public ResponseEntity<Resource> preview(@PathVariable String uuid, HttpSession session) {
         Long userId = (Long) session.getAttribute("userId");
         if (userId == null) return ResponseEntity.status(401).build();
 
-        Document doc = documentService.getByIdAndUser(id, userId);
+        Document doc = documentService.getByUuidAndUser(uuid, userId);
         if (doc == null) return ResponseEntity.notFound().build();
 
-        Resource resource = documentService.getResource(id, userId);
+        Resource resource = documentService.getResourceByUuid(uuid, userId);
         if (resource == null) return ResponseEntity.notFound().build();
 
         String contentType = "application/octet-stream";

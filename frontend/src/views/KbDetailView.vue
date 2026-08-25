@@ -71,8 +71,8 @@ async function deleteDoc(id: number) {
   }
 }
 
-function previewDoc(id: number) {
-  window.open(`/doc/api/preview/${id}`, '_blank')
+function previewDoc(uuid: string) {
+  window.open(`/doc/api/preview/${uuid}`, '_blank')
 }
 
 const statusLabel: Record<number, string> = { 0: '待处理', 1: '处理中', 2: '已完成', 3: '失败' }
@@ -125,7 +125,7 @@ onMounted(() => { fetchKb(); fetchDocs() })
           </div>
           <span :class="['tag', statusTag[doc.status] || 'tag-pending']">{{ statusLabel[doc.status] || doc.status }}</span>
           <div style="display:flex;gap:8px">
-            <button class="btn btn-sm btn-ghost" @click="previewDoc(doc.id)">预览</button>
+            <button class="btn btn-sm btn-ghost" @click="previewDoc(doc.uuid)">预览</button>
             <button class="btn btn-sm btn-danger" @click="deleteDoc(doc.id)">删除</button>
           </div>
         </div>

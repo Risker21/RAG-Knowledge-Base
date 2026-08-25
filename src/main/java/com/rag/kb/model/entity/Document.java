@@ -9,6 +9,7 @@ import java.time.LocalDateTime;
 public class Document {
     @TableId(type = IdType.AUTO)
     private Long id;
+    private String uuid;
     private Long kbId;
     private Long userId;
     @TableField("filename")

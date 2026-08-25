@@ -24,6 +24,7 @@ CREATE TABLE IF NOT EXISTS `knowledge_base` (
 -- 文档表
 CREATE TABLE IF NOT EXISTS `document` (
     `id` bigint PRIMARY KEY AUTO_INCREMENT,
+    `uuid` varchar(36) NOT NULL,
     `kb_id` bigint NOT NULL,
     `user_id` bigint NOT NULL,
     `filename` varchar(256) NOT NULL,
@@ -34,6 +35,7 @@ CREATE TABLE IF NOT EXISTS `document` (
     `chunk_count` int DEFAULT 0,
     `error_msg` text,
     `created_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE KEY `uk_uuid` (`uuid`),
     FOREIGN KEY (`kb_id`) REFERENCES `knowledge_base`(`id`),
     FOREIGN KEY (`user_id`) REFERENCES `user`(`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
