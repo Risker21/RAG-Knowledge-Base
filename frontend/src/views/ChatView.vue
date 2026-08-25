@@ -325,7 +325,7 @@ async function handleAsk() {
 <style scoped>
 .chat-layout {
   display: flex;
-  height: calc(100vh - 60px);
+  height: calc(100vh - 64px); /* 减去顶部导航栏高度 */
   overflow: hidden;
   position: relative;
 }
@@ -673,7 +673,7 @@ async function handleAsk() {
 @media (max-width: 768px) {
   .chat-layout {
     flex-direction: column;
-    height: calc(100vh - 60px);
+    height: 100vh; /* 移动端占满全屏，内部滚动 */
   }
   .mobile-topbar { display: flex; }
   .sidebar-mask { display: block; }
