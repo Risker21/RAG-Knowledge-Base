@@ -110,17 +110,11 @@ public class EmbeddingService {
 
             Map<String, Object> body = new HashMap<>();
             body.put("model", model);
-            List<Map<String, String>> inputList = new ArrayList<>();
-            for (String text : texts) {
-                Map<String, String> item = new HashMap<>();
-                item.put("type", "text");
-                item.put("text", text);
-                inputList.add(item);
-            }
-            body.put("input", inputList);
+            // 文本向量化接口：input 为字符串数组，支持批量，每条独立返回一个向量
+            body.put("input", texts);
 
             HttpEntity<Map<String, Object>> request = new HttpEntity<>(body, headers);
-            String url = baseUrl + "/embeddings/multimodal";
+            String url = baseUrl + "/embeddings";
             ResponseEntity<String> response = restTemplate.postForEntity(url, request, String.class);
 
             JsonNode root = objectMapper.readTree(response.getBody());
