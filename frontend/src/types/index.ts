@@ -14,6 +14,7 @@ export interface KnowledgeBase {
 
 export interface Document {
   id: number
+  uuid: string
   kbId: number
   userId: number
   originalName: string
