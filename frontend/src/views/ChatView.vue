@@ -20,6 +20,7 @@ const refDetail = ref<{ title: string; score: number; snippet: string } | null>(
 const localMessages = ref<any[]>(store.messages)
 const streamKey = ref(0)
 const sidebarOpen = ref(false)
+const messagesEl = ref<HTMLElement | null>(null)
 
 function toggleSidebar() {
   sidebarOpen.value = !sidebarOpen.value
@@ -69,6 +70,7 @@ onMounted(async () => {
   if (convId) {
     store.currentConvId = Number(convId)
     await store.loadMessages(store.currentConvId)
+    scrollToBottom(true)
   }
 })
 
@@ -81,6 +83,7 @@ async function switchConversation(convId: number) {
   store.currentConvId = convId
   streamingRefs.value = ''
   await store.loadMessages(convId)
+  scrollToBottom(true)
 }
 
 async function deleteConv(id: number) {
@@ -94,10 +97,16 @@ function autoGrow(el: HTMLTextAreaElement) {
   el.style.height = Math.min(el.scrollHeight, 140) + 'px'
 }
 
-function scrollToBottom() {
+// force = 无论当前是否在底部都滚动到底（用于切换/载入对话、发送消息）
+// 非 force 时，只有用户原本就靠近底部才跟随（避免流式输出时把正在向上翻阅的用户拽回底部）
+function scrollToBottom(force = false) {
   nextTick(() => {
-    const el = document.querySelector('.messages')
-    if (el) el.scrollTop = el.scrollHeight
+    const el = messagesEl.value
+    if (!el) return
+    const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight
+    if (force || distanceFromBottom < 100) {
+      el.scrollTop = el.scrollHeight
+    }
   })
 }
 
@@ -132,6 +141,7 @@ async function handleAsk() {
 
   // Add user message + AI streaming placeholder to localMessages
   updateMessages([...localMessages.value, { id: Date.now(), conversationId: convId, role: 0, content: question, referencesJson: '', createdAt: '' }, streamMsg])
+  scrollToBottom(true)
 
   let fullText = ''
 
@@ -192,6 +202,7 @@ async function handleAsk() {
     // Remove streaming placeholder if no response
     updateMessages(localMessages.value.filter(m => m !== streamMsg))
   }
+  scrollToBottom(true)
 }
 </script>
 
@@ -254,7 +265,7 @@ async function handleAsk() {
         </div>
       </div>
 
-      <div class="messages" id="messages">
+      <div class="messages" id="messages" ref="messagesEl">
         <div v-if="localMessages.length === 0 && !store.currentConvId" class="welcome">
           <h2>开始提问</h2>
           <p>上传文档后，在这里提问即可获得基于文档内容的回答</p>
@@ -485,7 +496,6 @@ async function handleAsk() {
   display: flex;
   flex-direction: column;
   gap: 0;
-  scroll-behavior: smooth;
   position: relative;
   z-index: 1;
 }
